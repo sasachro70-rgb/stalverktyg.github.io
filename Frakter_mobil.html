@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<!-- ══════════════════════════════════════════════════════════
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel)
+     วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
+
+       【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
+       【M02】 หน้าจอ: จับคู่กับคอมพิวเตอร์ (สแกน QR บนจอ PC)
+       【M03】 หน้าจอ: ถ่ายรูป + ฟอร์ม + รายการที่ส่งแล้ว
+       【M04】 Relay: เข้ารหัส AES-GCM และส่ง/รับผ่าน ntfy.sh (ต้องตรงกับแอป PC)
+       【M05】 ตัวแปรหลัก การจับคู่ รายชื่อลูกค้า/ผู้ขนส่งจาก PC
+       【M06】 อ่านรูป: บาร์โค้ด (BarcodeDetector / ZXing) + ตัวอักษร (Tesseract OCR)
+       【M07】 แยกข้อมูลจากรูป: ผู้ขนส่ง ลูกค้า เลขใบขนส่ง เลขโปรเจกต์
+       【M08】 ฟอร์มและคำแนะนำ (ชิป)
+       【M09】 ส่งไปยัง PC + กล่องขาออก + รับการยืนยัน "บันทึกใน Excel แล้ว"
+       【M10】 เริ่มต้นระบบ
+
+     หมายเหตุ: หน้านี้ต้องเปิดผ่าน https (เช่น GitHub Pages) จึงจะใช้กล้อง/การเข้ารหัสได้
+     ══════════════════════════════════════════════════════════ -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1e293b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Frakter">
+<title>Frakter Mobil</title>
+<!-- 【M01】 CSS -->
+<style>
+:root{
+  --bg:#f5f6f8;--surface:#fff;--surface2:#f3f4f6;--line:#e5e7eb;--line2:#eef0f3;
+  --ink:#111827;--mute:#6b7280;--faint:#9ca3af;
+  --brand:#1e293b;--brand-ink:#fff;--ring:#3b82f6;
+  --in:#047857;--in-bg:#d1fae5;--out:#1d4ed8;--out-bg:#dbeafe;
+  --warn:#92400e;--warn-bg:#fef3c7;--warn-line:#fcd34d;--bad:#b91c1c;--bad-bg:#fee2e2;--ok:#047857;--ok-bg:#d1fae5;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1319;--surface:#161c25;--surface2:#1d2531;--line:#273142;--line2:#202a38;
+  --ink:#e8ecf2;--mute:#9aa6b8;--faint:#6b7789;
+  --brand:#e8ecf2;--brand-ink:#0e1319;--ring:#60a5fa;
+  --in:#6ee7b7;--in-bg:#064e3b;--out:#93c5fd;--out-bg:#1e3a8a;
+  --warn:#fcd34d;--warn-bg:#3a2a07;--warn-line:#7c5a0b;--bad:#fca5a5;--bad-bg:#431414;--ok:#6ee7b7;--ok-bg:#064e3b;
+  --shadow:0 1px 2px rgba(0,0,0,.4);}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+svg{width:20px;height:20px;flex:none}
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:env(safe-area-inset-top) 16px 0}
+.hb{height:56px;display:flex;align-items:center;gap:10px}
+.hb h1{margin:0;font-size:16px;font-weight:700;line-height:1.15}
+.hb h1 small{display:block;font-size:12px;font-weight:500;color:var(--mute)}
+.hb .sp{flex:1}
+.dot{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.dot i{width:8px;height:8px;border-radius:50%;background:#f59e0b}
+.dot.on i{background:#10b981}
+.ib{border:0;background:transparent;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--mute);cursor:pointer}
+.ib:active{background:var(--surface2)}
+main{padding:14px 16px;max-width:620px;margin:0 auto;display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:16px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:700}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 16px;font-weight:600;cursor:pointer;min-height:48px}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn[disabled]{opacity:.45}
+.cap{display:grid;grid-template-columns:1fr auto;gap:10px}
+.cap .btn.pri{min-height:64px;font-size:17px;border-radius:16px}
+.cap .btn.pri svg{width:26px;height:26px}
+.prev{display:none;gap:12px;margin-top:12px;align-items:flex-start}
+.prev.on{display:flex}
+.prev img{width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--line);flex:none}
+.an{display:grid;gap:4px;font-size:14px;min-width:0}
+.an div{color:var(--mute)}
+.an div b{color:var(--ink);font-weight:600}
+.an .spin{display:inline-block;vertical-align:-2px;margin-right:6px;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--ring);border-radius:50%;animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;padding:10px;border-radius:10px;font-weight:600;color:var(--mute);cursor:pointer}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.seg button.on[data-k=in]{color:var(--in)}.seg button.on[data-k=out]{color:var(--out)}
+.f{display:grid;gap:6px;margin-top:14px}
+.f>label{font-size:13px;font-weight:600;color:var(--mute)}
+.f input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);min-height:48px;font-size:16px}
+.f input:focus{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 25%,transparent)}
+.f .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.row2{display:grid;grid-template-columns:1fr 1.6fr;gap:10px}
+.req{color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips:empty{display:none}
+.chip{border:1px solid var(--line);background:var(--surface2);border-radius:999px;padding:7px 12px;font-size:14px;font-weight:600;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.ai{border-color:color-mix(in srgb,var(--ring) 55%,var(--line));background:color-mix(in srgb,var(--ring) 12%,var(--surface))}
+.chip.on{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.chip.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:500}
+.lbl{font-size:12px;color:var(--faint);margin:2px 0 -2px}
+.sugl{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sugl:empty{display:none}
+.sugl button{border:0;border-bottom:1px solid var(--line2);background:var(--surface);text-align:left;padding:11px 14px;cursor:pointer}
+.sugl button:last-child{border-bottom:0}
+.sugl small{color:var(--mute);margin-left:6px}
+.newc{display:none;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:12px;font-size:14px;gap:8px}
+.newc.on{display:grid}
+.newc input{border-color:var(--warn-line)}
+.note{border-radius:14px;padding:12px 14px;font-size:14px;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--warn)}
+.note.bad{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+.ferr{display:none;margin-top:12px}.ferr.on{display:block}
+.send{position:fixed;left:0;right:0;bottom:0;z-index:20;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.send .btn{width:100%;max-width:620px;margin:0 auto;display:flex;min-height:56px;font-size:17px;border-radius:16px}
+.out{display:grid;gap:10px}
+.it{border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:4px}
+.it .t{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.it b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it .m{font-size:13px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.st.wait{background:var(--surface2);color:var(--mute)}
+.st.q{background:var(--warn-bg);color:var(--warn)}
+.st.ok{background:var(--ok-bg);color:var(--ok)}
+.st.err{background:var(--bad-bg);color:var(--bad)}
+.it .act{display:flex;gap:8px;margin-top:4px}
+.it .act button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:600}
+.empty{color:var(--faint);font-size:14px;text-align:center;padding:8px}
+.pair{text-align:center;padding:28px 18px}
+.pair .big{width:68px;height:68px;border-radius:20px;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;margin:0 auto 16px}
+.pair .big svg{width:32px;height:32px}
+.pair h2{all:unset;display:block;font-size:21px;font-weight:700;margin-bottom:8px}
+.pair p{color:var(--mute);margin:0 0 18px}
+.pair ol{text-align:left;color:var(--mute);padding-left:22px;margin:0 0 18px}
+.pair textarea{width:100%;min-height:84px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);font:13px ui-monospace,Menlo,Consolas,monospace}
+.sheet{position:fixed;inset:0;background:rgba(10,15,25,.5);z-index:40;display:none;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .p{background:var(--surface);width:100%;border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));display:grid;gap:10px;max-height:85vh;overflow:auto}
+.sheet h3{margin:0 0 4px;font-size:17px}
+.sheet .kv{font-size:13px;color:var(--mute)}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:50;display:grid;gap:8px;pointer-events:none}
+.toast{background:var(--brand);color:var(--brand-ink);border-radius:14px;padding:12px 16px;font-weight:500;box-shadow:0 12px 30px rgba(0,0,0,.25);max-width:560px;margin:0 auto}
+.toast.bad{background:var(--bad);color:#fff}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="hb">
+  <h1>STÅLVERKTYG<small>Frakter – mobil</small></h1>
+  <span class="sp"></span>
+  <span class="dot" id="conn"><i></i><span>Ej kopplad</span></span>
+  <button class="ib" id="bSet" aria-label="Inställningar" title="Inställningar"></button>
+</div></header>
+
+<!-- 【M02】 หน้าจอ: จับคู่กับคอมพิวเตอร์ -->
+<main id="pairView" class="hide">
+  <div class="card pair">
+    <div class="big" id="pairIc"></div>
+    <h2>Koppla mobilen till Frakter</h2>
+    <p>Mobilen skickar fraktsedlar till datorn som har Excel-filen öppen. Datorn sparar raden i Frakter-filen automatiskt.</p>
+    <ol>
+      <li>Öppna Frakter-appen på datorn och klicka på <b>Mobil</b>.</li>
+      <li>Skanna QR-koden med mobilens vanliga kamera.</li>
+    </ol>
+    <p style="margin-bottom:8px">Eller klistra in kopplingskoden här:</p>
+    <textarea id="pairCode" placeholder="SVF1.…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="note bad ferr" id="pairErr"></div>
+    <button class="btn pri" id="bPair" style="width:100%;margin-top:12px">Koppla</button>
+  </div>
+</main>
+
+<!-- 【M03】 หน้าจอ: ถ่ายรูป + ฟอร์ม + รายการที่ส่งแล้ว -->
+<main id="mainView" class="hide">
+  <div class="note hide" id="listNote"></div>
+
+  <section class="card">
+    <h2>1 · Fota fraktsedeln</h2>
+    <div class="cap">
+      <button class="btn pri" id="bCam"></button>
+      <button class="btn" id="bPick" aria-label="Välj bild från galleriet" title="Välj bild"></button>
+    </div>
+    <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="inPick" accept="image/*" hidden>
+    <div class="prev" id="prev">
+      <img id="prevImg" alt="Foto av fraktsedeln">
+      <div class="an" id="an"></div>
+    </div>
+  </section>
+
+  <section class="card" id="formCard">
+    <h2>2 · Kontrollera uppgifterna</h2>
+    <div class="seg" id="typeSeg"><button type="button" data-k="in" class="on">Ankomst (in)</button><button type="button" data-k="out">Avgång (ut)</button></div>
+    <div class="row2">
+      <div class="f"><label for="fDate">Datum <span class="req">*</span></label><input type="date" id="fDate"></div>
+      <div class="f"><label for="fSign">Sign <span class="req">*</span></label><input id="fSign" maxlength="10" autocapitalize="characters" autocomplete="off" placeholder="T.ex. JE" style="text-transform:uppercase"></div>
+    </div>
+    <div class="chips" id="cSign" style="margin-top:8px"></div>
+
+    <div class="f"><label for="fCust" id="lCust">Från vem <span class="req">*</span></label>
+      <input id="fCust" autocomplete="off" placeholder="Sök eller skriv kund">
+      <div class="lbl hide" id="lblCustAi">Hittat på fraktsedeln:</div>
+      <div class="chips" id="cCustAi"></div>
+      <div class="sugl" id="sCust"></div>
+      <div class="newc" id="newc"><span><b>Ny kund</b> – finns inte i kundlistan. Den läggs till i fliken Data.</span>
+        <input id="fPost" placeholder="Postnr. och ort, t.ex. 335 73 Hillerstorp" autocomplete="off"><div class="chips" id="cPost"></div></div>
+    </div>
+
+    <div class="f"><label for="fInh">Innehåll <span class="req">*</span></label>
+      <input id="fInh" autocomplete="off" placeholder="T.ex. VTG nr P26104, Förbruk.">
+      <div class="chips" id="cInh"></div>
+    </div>
+
+    <div class="f"><label for="fSped">Speditör</label>
+      <input id="fSped" autocomplete="off" placeholder="T.ex. DSV, DHL, Postnord">
+      <div class="chips" id="cSped"></div>
+    </div>
+
+    <div class="f"><label for="fFs">Fraktsedels nr.</label>
+      <input id="fFs" class="mono" autocomplete="off" autocapitalize="characters" placeholder="Streckkoden läses automatiskt">
+      <div class="chips" id="cFs"></div>
+    </div>
+    <div class="note bad ferr" id="ferr" role="alert"></div>
+  </section>
+
+  <section class="card">
+    <h2>Skickade från den här mobilen</h2>
+    <div class="out" id="out"></div>
+  </section>
+</main>
+
+<div class="send hide" id="sendBar"><button class="btn pri" id="bSend"></button></div>
+
+<div class="sheet" id="sheet"><div class="p">
+  <h3>Inställningar</h3>
+  <div class="kv" id="setInfo"></div>
+  <button class="btn" id="bLists">Hämta kundlistan igen</button>
+  <button class="btn" id="bClearOut">Rensa sparade rader ur listan</button>
+  <button class="btn" id="bUnpair" style="color:var(--bad)">Koppla bort mobilen</button>
+  <button class="btn pri" id="bSetClose">Stäng</button>
+</div></div>
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// 【M04】 Relay: เข้ารหัส AES-GCM + ส่ง/รับผ่าน ntfy.sh
+//   ข้อความทุกชิ้นถูกเข้ารหัสด้วยกุญแจในรหัสจับคู่ ntfy.sh เห็นแต่ข้อมูลที่อ่านไม่ออก
+//   *** โค้ดส่วนนี้ต้องเหมือนกับ 【ส่วน 16】 ในแอป PC ***
+// ══════════════════════════════════════════════════════════
+var Relay=(function(){
+  var HOST='https://ntfy.sh';
+  function b64u(u8){var s='';for(var i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+  function ub64u(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+  function parseCode(txt){
+    var m=String(txt||'').match(/SVF1\.([A-Za-z0-9_-]{12,60})\.([A-Za-z0-9_-]{43})/);
+    return m?{code:'SVF1.'+m[1]+'.'+m[2],topic:m[1],raw:ub64u(m[2])}:null;
+  }
+  function newCode(){var a='abcdefghijklmnopqrstuvwxyz234567',r=crypto.getRandomValues(new Uint8Array(22)),t='svfr';for(var i=0;i<22;i++)t+=a[r[i]&31];
+    return 'SVF1.'+t+'.'+b64u(crypto.getRandomValues(new Uint8Array(32)))}
+  function key(raw){return crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt'])}
+  async function encBytes(k,u8){var iv=crypto.getRandomValues(new Uint8Array(12));var ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,u8));var o=new Uint8Array(12+ct.length);o.set(iv);o.set(ct,12);return o}
+  async function decBytes(k,u8){return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:u8.subarray(0,12)},k,u8.subarray(12)))}
+  async function enc(k,obj){return 'v1.'+b64u(await encBytes(k,new TextEncoder().encode(JSON.stringify(obj))))}
+  async function dec(k,s){if(typeof s!=='string'||s.slice(0,3)!=='v1.')return null;try{return JSON.parse(new TextDecoder().decode(await decBytes(k,ub64u(s.slice(3)))))}catch(e){return null}}
+  async function gz(u8,inv){if(typeof CompressionStream==='undefined')return null;var cs=inv?new DecompressionStream('gzip'):new CompressionStream('gzip');
+    var out=new Response(new Blob([u8]).stream().pipeThrough(cs));return new Uint8Array(await out.arrayBuffer())}
+  async function publish(topic,body){
+    var r=await fetch(HOST+'/'+topic+'?firebase=no',{method:'POST',body:body,cache:'no-store'});
+    if(!r.ok)throw Object.assign(new Error('Relay svarade '+r.status),{status:r.status});
+    return r.json();
+  }
+  async function poll(topic,since){
+    var r=await fetch(HOST+'/'+topic+'/json?poll=1&since='+encodeURIComponent(since||'all'),{cache:'no-store'});
+    if(!r.ok)throw new Error('Relay svarade '+r.status);
+    return (await r.text()).split('\n').map(function(l){try{return JSON.parse(l)}catch(e){return null}}).filter(function(m){return m&&m.event==='message'});
+  }
+  /* ฟังข้อความแบบสด (สตรีม NDJSON) ต่อใหม่อัตโนมัติเมื่อหลุด */
+  function stream(topic,since,onMsg,onState){
+    var stopped=false,ctrl=null,last=since,delay=2000;
+    (async function(){
+      while(!stopped){
+        try{
+          ctrl=new AbortController();
+          var r=await fetch(HOST+'/'+topic+'/json?since='+encodeURIComponent(last||'all'),{signal:ctrl.signal,cache:'no-store'});
+          if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
+          var rd=r.body.getReader(),td=new TextDecoder(),buf='';
+          for(;;){
+            var x=await rd.read();if(x.done)break;
+            buf+=td.decode(x.value,{stream:true});var i;
+            while((i=buf.indexOf('\n'))>=0){
+              var line=buf.slice(0,i);buf=buf.slice(i+1);if(!line.trim())continue;
+              var m=null;try{m=JSON.parse(line)}catch(e){}
+              if(!m)continue;
+              if(m.event==='open'){delay=2000;onState&&onState(true)}
+              if(m.event==='message'){try{await onMsg(m)}catch(e){}last=m.id}
+            }
+          }
+        }catch(e){}
+        if(stopped)break;
+        onState&&onState(false);
+        await new Promise(function(res){setTimeout(res,delay)});delay=Math.min(delay*2,60000);
+      }
+    })();
+    return {stop:function(){stopped=true;try{ctrl&&ctrl.abort()}catch(e){}}};
+  }
+  return {HOST:HOST,b64u:b64u,ub64u:ub64u,parseCode:parseCode,newCode:newCode,key:key,encBytes:encBytes,decBytes:decBytes,enc:enc,dec:dec,gz:gz,publish:publish,poll:poll,stream:stream};
+})();
+
+(function(){
+// ══════════════════════════════════════════════════════════
+// 【M05】 ตัวแปรหลัก การจับคู่ รายชื่อลูกค้า/ผู้ขนส่งจาก PC
+// ══════════════════════════════════════════════════════════
+var $=function(id){return document.getElementById(id)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]})};
+function svg(p,w){return'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||2)+'" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}
+var IC={
+  cam:svg('<path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/>'),
+  img:svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>'),
+  gear:svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',1.6),
+  send:svg('<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>'),
+  link:svg('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'),
+  check:svg('<path d="M20 6 9 17l-5-5"/>',2.4)
+};
+$('bSet').innerHTML=IC.gear;$('bCam').innerHTML=IC.cam+'<span>Fota fraktsedel</span>';$('bPick').innerHTML=IC.img;$('pairIc').innerHTML=IC.link;
+$('bSend').innerHTML=IC.send+'<span>Skicka till Excel</span>';
+
+var LS={get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+        set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+var S={pair:null,key:null,lists:LS.get('fm.lists',null),out:LS.get('fm.out',[]),type:'in',ai:null,ackStream:null,online:false,ocrWorker:null,shotId:0};
+var OWN=/forsheda|st[aå]lverktyg|^fsv$/i;
+
+function toast(msg,bad){var d=document.createElement('div');d.className='toast'+(bad?' bad':'');d.textContent=msg;$('toast').appendChild(d);setTimeout(function(){d.remove()},bad?6000:2800)}
+function todayIso(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function uid(){return Date.now().toString(36)+'-'+Relay.b64u(crypto.getRandomValues(new Uint8Array(6)))}
+function setConn(on,txt){S.online=on;var c=$('conn');c.classList.toggle('on',!!on);c.querySelector('span').textContent=txt||(on?'Ansluten':'Offline')}
+
+async function pairWith(txt){
+  var p=Relay.parseCode(txt);
+  if(!p)throw new Error('Koden känns inte igen. Den börjar med SVF1.');
+  S.pair=p;S.key=await Relay.key(p.raw);LS.set('fm.code',p.code);
+}
+function showView(){
+  var paired=!!S.key;
+  $('pairView').classList.toggle('hide',paired);$('mainView').classList.toggle('hide',!paired);$('sendBar').classList.toggle('hide',!paired);
+  if(!paired)setConn(false,'Ej kopplad');
+}
+$('bPair').onclick=async function(){
+  try{await pairWith($('pairCode').value);$('pairErr').classList.remove('on');showView();startAfterPair();toast('Mobilen är kopplad')}
+  catch(e){$('pairErr').textContent=e.message;$('pairErr').classList.add('on')}
+};
+
+/* รายชื่อจาก PC: ส่งมาเป็นชิ้นๆ ที่หัวข้อ <topic>-l (เข้ารหัส + gzip) */
+async function fetchLists(manual){
+  if(!S.key)return;
+  try{
+    var msgs=await Relay.poll(S.pair.topic+'-l','all'),sets={};
+    msgs.forEach(function(m){var o;try{o=JSON.parse(m.message)}catch(e){return}if(!o||o.t!=='l')return;
+      var s=sets[o.s]||(sets[o.s]={n:o.n,z:o.z,parts:[],time:0});s.parts[o.i]=o.d;s.time=Math.max(s.time,m.time)});
+    var best=null;Object.keys(sets).forEach(function(k){var s=sets[k],ok=s.parts.filter(Boolean).length===s.n;if(ok&&(!best||s.time>best.time))best=s});
+    if(!best){if(manual)toast('Ingen kundlista hittades. Öppna Frakter på datorn med mobilkopplingen påslagen.',true);renderListNote();return}
+    var bytes=await Relay.decBytes(S.key,Relay.ub64u(best.parts.join('')));
+    if(best.z)bytes=await Relay.gz(bytes,true);
+    var L=JSON.parse(new TextDecoder().decode(bytes));
+    S.lists={at:L.at,signs:uniq(L.signs),speditors:uniq(L.speditors),customers:(L.customers||[]).map(function(c){return{name:c[0],postnr:c[1]||''}})};
+    LS.set('fm.lists',S.lists);renderListNote();renderStatic();
+    if(manual)toast('Kundlistan uppdaterad ('+S.lists.customers.length+' kunder)');
+  }catch(e){if(manual)toast('Kunde inte hämta listan: '+e.message,true)}
+}
+function uniq(a){var s={},o=[];(a||[]).forEach(function(x){x=String(x||'').trim();var k=x.toLowerCase();if(x&&!s[k]){s[k]=1;o.push(x)}});return o}
+function renderListNote(){
+  var n=$('listNote');
+  if(!S.lists){n.className='note';n.innerHTML='<b>Kundlistan saknas ännu.</b> Du kan ändå skicka – men öppna Frakter på datorn och slå på mobilkopplingen så hämtas kunder och speditörer hit.';return}
+  n.className='note hide';
+}
+
+// ══════════════════════════════════════════════════════════
+// 【M06】 อ่านรูป: บาร์โค้ด + ตัวอักษร (OCR)
+//   บาร์โค้ด: Android ใช้ BarcodeDetector ในตัว, iPhone ใช้ ZXing (โหลดจาก CDN)
+//   ตัวอักษร: Tesseract.js ภาษาสวีเดน+อังกฤษ (ครั้งแรกโหลด ~10 MB แล้วจำไว้)
+// ══════════════════════════════════════════════════════════
+var ZXING_URL='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+var TESS_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+var loaded={};
+function loadScript(src){if(loaded[src])return loaded[src];return loaded[src]=new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){delete loaded[src];rej(new Error('Kunde inte ladda '+src.split('/')[4]))};document.head.appendChild(s)})}
+function loadImg(src){return new Promise(function(res,rej){var i=new Image();i.onload=function(){res(i)};i.onerror=rej;i.src=src})}
+function toCanvas(img,max,rot){
+  var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
+  var c=document.createElement('canvas');c.width=rot?h:w;c.height=rot?w:h;var x=c.getContext('2d');
+  if(rot){x.translate(h,0);x.rotate(Math.PI/2)}x.drawImage(img,0,0,w,h);return c;
+}
+async function readBarcodes(img){
+  var out=[];
+  if('BarcodeDetector' in window){
+    try{var bd=new BarcodeDetector();var r=await bd.detect(toCanvas(img,2400));r.forEach(function(x){if(x.rawValue)out.push(x.rawValue)})}catch(e){}
+  }
+  if(!out.length){
+    try{
+      await loadScript(ZXING_URL);
+      var hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      var reader=new ZXing.BrowserMultiFormatReader(hints);
+      for(var rot=0;rot<2&&!out.length;rot++){
+        var cimg=await loadImg(toCanvas(img,1800,!!rot).toDataURL('image/jpeg',.92));
+        try{var res=await reader.decodeFromImageElement(cimg);if(res&&res.getText())out.push(res.getText())}catch(e){}
+      }
+    }catch(e){}
+  }
+  return uniq(out);
+}
+async function ocr(img,onProg){
+  await loadScript(TESS_URL);
+  if(!S.ocrWorker)S.ocrWorker=Tesseract.createWorker(['swe','eng'],1,{logger:function(m){if(m.status==='recognizing text'&&onProg)onProg(m.progress)}});
+  var w=await S.ocrWorker;
+  var r=await w.recognize(toCanvas(img,2000));
+  return (r&&r.data&&r.data.text)||'';
+}
+
+// ══════════════════════════════════════════════════════════
+// 【M07】 แยกข้อมูลจากรูป: ผู้ขนส่ง ลูกค้า เลขใบขนส่ง เลขโปรเจกต์
+//   รูปแบบเลขใบขนส่งเลียนแบบที่ใช้อยู่ใน Excel เช่น "610 034 959 3", "(00) 3909 9999 1200 223 559"
+// ══════════════════════════════════════════════════════════
+function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function grp(s,sizes){var o=[],i=0;sizes.forEach(function(n){if(i<s.length){o.push(s.slice(i,i+n));i+=n}});if(i<s.length)o.push(s.slice(i));return o.join(' ')}
+function g3(s){return s.replace(/(.{3})(?=.)/g,'$1 ')}
+function g4(s){return s.replace(/(.{4})(?=.)/g,'$1 ')}
+function cleanCode(raw){return String(raw||'').replace(/^\][A-Za-z]\d/,'').replace(/[\x00-\x1f]/g,'').trim()}
+function carrierFromCode(raw){
+  var c=cleanCode(raw).replace(/[\s()]/g,'').toUpperCase();
+  if(/^1Z[0-9A-Z]{16}$/.test(c))return'UPS';
+  if(/^J?JD\d{16,20}$/.test(c))return'DHL';
+  if(/^003909999/.test(c))return'Dachser';
+  if(/^[A-Z]{2}\d{9}SE$/.test(c))return'Postnord';
+  return'';
+}
+function fmtWaybill(raw,sped){
+  var s=cleanCode(raw),c=s.replace(/[\s()]/g,'').toUpperCase(),m,sp=norm(sped);
+  if(/^1Z[0-9A-Z]{16}$/.test(c))return'1Z '+c.slice(2,5)+' '+c.slice(5,8)+' '+c.slice(8,10)+' '+c.slice(10,14)+' '+c.slice(14);
+  if((m=c.match(/^00(\d{18})$/)))return'(00) '+(/dachser/.test(sp)||/^3909999/.test(m[1])?grp(m[1],[4,4,4,3,3]):g3(m[1]));
+  if((m=c.match(/^J?(JD\d{16,20})$/)))return'(J) '+g4(m[1]);
+  if(/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(c))return c;
+  if(/^\d{8,14}$/.test(c))return g3(c);
+  return s;
+}
+function looksLikeWaybill(raw){
+  var c=cleanCode(raw).replace(/[\s()]/g,'');
+  if(/^https?:/i.test(c)||c.length<8||c.length>40)return false;
+  return /^\d{8,20}$/.test(c)||/^00\d{18}$/.test(c)||/^1Z[0-9A-Z]{16}$/i.test(c)||/^J?JD\d{16,20}$/i.test(c)||/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(c);
+}
+function waybillScore(raw){var c=cleanCode(raw).replace(/[\s()]/g,'');if(/^00\d{18}$/.test(c)||/^1Z/i.test(c)||/^J?JD/i.test(c))return 3;if(/^\d{10,12}$/.test(c))return 2;return 1}
+var CARRIERS=['DSV','DHL','Postnord','DB Schenker','Schenker','Dachser','Bring','UPS','FedEx','TNT','GLS','BBG','Gnosjö trafik','Bussgods','Transportören AB','Jetpak','Budbee','Instabox','Fraktkompaniet','Stena Recycling','Vestbo Emballage','FMAB'];
+function canonSped(name){var L=(S.lists&&S.lists.speditors)||[],k=norm(name);for(var i=0;i<L.length;i++)if(norm(L[i])===k)return L[i];
+  for(i=0;i<L.length;i++)if(norm(L[i]).indexOf(k)>=0||k.indexOf(norm(L[i]))>=0)return L[i];return name}
+function findCarriers(text,codes){
+  var t=' '+norm(text)+' ',hits=[],seen={};
+  function add(n){n=canonSped(n);var k=norm(n);if(!seen[k]){seen[k]=1;hits.push(n)}}
+  codes.forEach(function(c){var x=carrierFromCode(c);if(x)add(x)});
+  uniq(((S.lists&&S.lists.speditors)||[]).concat(CARRIERS)).forEach(function(n){var k=norm(n);if(k.length>=3&&t.indexOf(' '+k+' ')>=0)add(n)});
+  if(/\bpost\s?nord\b/i.test(text))add('Postnord');
+  return hits;
+}
+var STOP={ab:1,aktiebolag:1,och:1,the:1,ltd:1,gmbh:1,inc:1,oy:1,as:1,kg:1,sa:1,srl:1,hb:1,kb:1,co:1};
+function findCustomers(text){
+  var C=(S.lists&&S.lists.customers)||[];if(!C.length||!text)return[];
+  var t=' '+norm(text)+' ',words={},digits=text.replace(/\D/g,'');t.split(' ').forEach(function(w){words[w]=1});
+  var res=[];
+  C.forEach(function(c){
+    if(OWN.test(c.name))return;
+    var toks=norm(c.name).split(' ').filter(function(w){return w.length>=3&&!STOP[w]});if(!toks.length)return;
+    var hit=toks.filter(function(w){return words[w]}).length;if(!hit)return;
+    var sc=hit/toks.length;
+    if(t.indexOf(' '+norm(c.name)+' ')>=0)sc+=.5;
+    var pz=(c.postnr||'').replace(/\D/g,'');if(pz.length===5&&digits.indexOf(pz)>=0)sc+=.4;
+    var town=norm((c.postnr||'').replace(/[\d\s]+/,' ')).split(' ').filter(function(w){return w.length>=4});
+    if(town.some(function(w){return words[w]}))sc+=.3;
+    res.push({name:c.name,sc:sc,hit:hit});
+  });
+  res.sort(function(a,b){return b.sc-a.sc||b.hit-a.hit||b.name.length-a.name.length});
+  return res.filter(function(r){return r.sc>=.5}).slice(0,4);
+}
+function findProjects(text){
+  var out=[],m,re=/\b([PTV])\s?[-:]?\s?(\d{4,5})((?:\s?[RT]\d))?\b/gi;
+  while((m=re.exec(text||''))){var v=m[1].toUpperCase()+m[2]+(m[3]||'').replace(/\s/g,'').toUpperCase();if(out.indexOf(v)<0)out.push(v)}
+  return out.slice(0,6);
+}
+function findTextWaybills(text){
+  var out=[],m,s=String(text||'');
+  var res=[/\b1Z\s?[0-9A-Z]{3}\s?[0-9A-Z]{3}\s?[0-9A-Z]{2}\s?[0-9A-Z]{4}\s?[0-9A-Z]{4}\b/gi,/\(00\)\s?[\d ]{18,26}/g,/\b\d{3}[ ]?\d{3}[ ]?\d{3}[ ]?\d{1,3}\b/g];
+  res.forEach(function(re){while((m=re.exec(s))){var v=m[0].replace(/\(00\)/,'00').replace(/\s/g,'');if(looksLikeWaybill(v)&&out.indexOf(v)<0)out.push(v)}});
+  return out.slice(0,4);
+}
+function findPostnr(text){var m=String(text||'').match(/\b(\d{3})\s?(\d{2})\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö-]{2,})/g)||[];return uniq(m.map(function(x){return x.replace(/^(\d{3})\s?(\d{2})\s+/,'$1 $2 ')})).slice(0,3)}
+
+// ══════════════════════════════════════════════════════════
+// 【M08】 ฟอร์มและคำแนะนำ (ชิป)
+// ══════════════════════════════════════════════════════════
+function setType(k){S.type=k;[].forEach.call($('typeSeg').children,function(b){b.classList.toggle('on',b.dataset.k===k)});
+  $('lCust').innerHTML=(k==='in'?'Från vem':'Till vem')+' <span class="req">*</span>'}
+$('typeSeg').onclick=function(e){var b=e.target.closest('button');if(b)setType(b.dataset.k)};
+function chipsHtml(arr,cls,cur){return arr.map(function(x){var v=typeof x==='string'?x:x.v,l=typeof x==='string'?x:x.l;
+  return'<button type="button" class="chip '+(cls||'')+(cur!=null&&norm(cur)===norm(v)?' on':'')+'" data-v="'+esc(v)+'">'+esc(l)+'</button>'}).join('')}
+function renderStatic(){
+  var signs=uniq((LS.get('fm.signs',[])).concat((S.lists&&S.lists.signs)||[])).slice(0,12);
+  $('cSign').innerHTML=chipsHtml(signs,'',$('fSign').value);
+  var ai=S.ai&&S.ai.carriers||[];
+  var sp=uniq(ai.concat((S.lists&&S.lists.speditors)||['DSV','DHL','Postnord','UPS','BBG','Dachser','Gnosjö trafik','Egen bil']));
+  $('cSped').innerHTML=sp.map(function(x){return chipsHtml([x],ai.indexOf(x)>=0?'ai':'',$('fSped').value)}).join('');
+  custChanged();
+}
+function renderAi(){
+  var a=S.ai||{};
+  $('cCustAi').innerHTML=chipsHtml((a.customers||[]).map(function(c){return c.name}),'ai',$('fCust').value);
+  $('lblCustAi').classList.toggle('hide',!(a.customers||[]).length);
+  $('cInh').innerHTML=chipsHtml((a.projects||[]).map(function(p){return{v:p,l:'+ '+p}}),'ai');
+  $('cFs').innerHTML=chipsHtml((a.waybills||[]).map(function(w){var f=fmtWaybill(w,$('fSped').value);return{v:f,l:f}}),'ai mono',$('fFs').value);
+  $('cPost').innerHTML=chipsHtml(a.postnr||[],'ai',$('fPost').value);
+  renderStatic();
+}
+function custKnown(v){var k=norm(v),C=(S.lists&&S.lists.customers)||[];for(var i=0;i<C.length;i++)if(norm(C[i].name)===k)return C[i];return null}
+function custChanged(){
+  var v=$('fCust').value.trim(),c=v&&custKnown(v);
+  $('newc').classList.toggle('on',!!v&&!c&&!!S.lists);
+  var list=$('sCust');
+  if(document.activeElement===$('fCust')&&v&&!c&&S.lists){
+    var k=norm(v),m=S.lists.customers.filter(function(x){return norm(x.name).indexOf(k)>=0}).slice(0,6);
+    list.innerHTML=m.map(function(x){return'<button type="button" data-v="'+esc(x.name)+'">'+esc(x.name)+(x.postnr?'<small>'+esc(x.postnr)+'</small>':'')+'</button>'}).join('');
+  }else list.innerHTML='';
+  [].forEach.call($('cCustAi').children,function(b){b.classList.toggle('on',norm(b.dataset.v)===norm(v))});
+}
+$('fCust').addEventListener('input',custChanged);$('fCust').addEventListener('focus',custChanged);
+$('fCust').addEventListener('blur',function(){setTimeout(function(){$('sCust').innerHTML=''},200)});
+$('sCust').onclick=function(e){var b=e.target.closest('button');if(!b)return;$('fCust').value=b.dataset.v;$('sCust').innerHTML='';custChanged()};
+$('cCustAi').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;$('fCust').value=b.dataset.v;custChanged()};
+$('cSign').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;$('fSign').value=b.dataset.v;renderStatic()};
+$('cSped').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;$('fSped').value=b.dataset.v;
+  var fs=$('fFs').value;if(fs)$('fFs').value=fmtWaybill(fs,b.dataset.v);renderAi()};
+$('cFs').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;$('fFs').value=b.dataset.v;renderAi()};
+$('cPost').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;$('fPost').value=b.dataset.v;renderAi()};
+$('cInh').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;var v=$('fInh').value.trim();
+  if(v.indexOf(b.dataset.v)<0)$('fInh').value=v?v+' '+b.dataset.v:'VTG nr '+b.dataset.v;b.remove()};
+$('fSign').addEventListener('input',renderStatic);$('fSped').addEventListener('input',renderStatic);
+
+/* ถ่ายรูป → วิเคราะห์ (บาร์โค้ดก่อนเพราะเร็ว แล้วค่อย OCR) */
+$('bCam').onclick=function(){$('inCam').value='';$('inCam').click()};
+$('bPick').onclick=function(){$('inPick').value='';$('inPick').click()};
+$('inCam').onchange=$('inPick').onchange=function(){var f=this.files&&this.files[0];if(f)analyse(f)};
+function anLine(id,html,busy){var el=$('an_'+id);if(!el){el=document.createElement('div');el.id='an_'+id;$('an').appendChild(el)}el.innerHTML=(busy?'<i class="spin"></i>':'')+html}
+async function analyse(file){
+  var my=++S.shotId,url=URL.createObjectURL(file);
+  $('prevImg').src=url;$('prev').classList.add('on');$('an').innerHTML='';
+  S.ai={customers:[],carriers:[],waybills:[],projects:[],postnr:[]};renderAi();
+  var img;try{img=await loadImg(url)}catch(e){anLine('e','Kunde inte läsa bilden');return}
+  anLine('bc','Letar streckkod…',true);
+  var codes=await readBarcodes(img);if(my!==S.shotId)return;
+  var wb=codes.filter(looksLikeWaybill).sort(function(a,b){return waybillScore(b)-waybillScore(a)});
+  S.ai.waybills=wb;S.ai.carriers=findCarriers('',wb);
+  if(S.ai.carriers.length&&!$('fSped').value)$('fSped').value=S.ai.carriers[0];
+  if(wb.length&&!$('fFs').value)$('fFs').value=fmtWaybill(wb[0],$('fSped').value);
+  anLine('bc',wb.length?'Streckkod: <b>'+esc(fmtWaybill(wb[0],$('fSped').value))+'</b>':'Ingen streckkod hittades');
+  renderAi();
+  anLine('ocr','Läser texten…',true);
+  var text='';
+  try{text=await ocr(img,function(p){if(my===S.shotId)anLine('ocr','Läser texten… '+Math.round(p*100)+' %',true)})}
+  catch(e){if(my===S.shotId)anLine('ocr','Textläsning ej tillgänglig ('+esc(e.message)+')');return}
+  if(my!==S.shotId)return;
+  var a=S.ai;
+  a.customers=findCustomers(text);
+  a.carriers=uniq(a.carriers.concat(findCarriers(text,wb)));
+  a.projects=findProjects(text);
+  a.postnr=findPostnr(text);
+  if(!a.waybills.length)a.waybills=findTextWaybills(text);
+  if(!$('fCust').value&&a.customers[0]&&(a.customers.length===1||a.customers[0].sc>a.customers[1].sc))$('fCust').value=a.customers[0].name;
+  if(!$('fSped').value&&a.carriers[0])$('fSped').value=a.carriers[0];
+  if(!$('fFs').value&&a.waybills[0])$('fFs').value=fmtWaybill(a.waybills[0],$('fSped').value);
+  var found=[];if(a.customers.length)found.push('kund');if(a.carriers.length)found.push('speditör');if(a.projects.length)found.push('projektnr');
+  anLine('ocr',found.length?'Hittade: <b>'+found.join(', ')+'</b> – kontrollera nedan':'Ingen känd text hittades – fyll i nedan');
+  renderAi();
+}
+
+// ══════════════════════════════════════════════════════════
+// 【M09】 ส่งไปยัง PC + กล่องขาออก + รับการยืนยัน
+//   สถานะ: send = กำลังส่ง, sent = รอคอมพิวเตอร์, q = PC ได้รับแล้วแต่ไฟล์ Excel ถูกล็อก,
+//          ok = บันทึกใน Excel แล้ว, err = ผิดพลาด
+//   ntfy.sh เก็บข้อความไว้ 12 ชม. → รายการที่ยังไม่ได้รับการยืนยันเกิน 8 ชม. จะถูกส่งซ้ำ (PC กันซ้ำด้วย id)
+// ══════════════════════════════════════════════════════════
+function saveOut(){S.out=S.out.slice(0,60);LS.set('fm.out',S.out)}
+function ferr(m){var e=$('ferr');e.textContent=m;e.classList.toggle('on',!!m);if(m)e.scrollIntoView({behavior:'smooth',block:'center'})}
+$('bSend').onclick=async function(){
+  var d=$('fDate').value,rec={ankomst:S.type==='in'?d:'',avgang:S.type==='out'?d:'',sign:$('fSign').value.trim().toUpperCase(),
+    tillFran:$('fCust').value.trim(),innehall:$('fInh').value.trim(),speditor:$('fSped').value.trim(),fraktsedel:$('fFs').value.trim()};
+  if(!d)return ferr('Ange datum.');
+  if(!rec.sign)return ferr('Sign saknas.');
+  if(!rec.tillFran)return ferr((S.type==='in'?'Från':'Till')+' vem saknas.');
+  if(!rec.innehall)return ferr('Innehåll saknas.');
+  var k=custKnown(rec.tillFran);if(k)rec.tillFran=k.name;
+  if(rec.fraktsedel){var dup=S.out.filter(function(o){return o.rec.fraktsedel===rec.fraktsedel&&o.st!=='err'})[0];
+    if(dup&&!confirm('Fraktsedeln '+rec.fraktsedel+' skickades redan ('+(dup.rec.ankomst||dup.rec.avgang)+'). Skicka igen?'))return}
+  ferr('');
+  var item={id:uid(),rec:rec,newPost:k?'':$('fPost').value.trim(),ts:Date.now(),st:'send'};
+  S.out.unshift(item);saveOut();renderOut();
+  var signs=LS.get('fm.signs',[]);LS.set('fm.signs',uniq([rec.sign].concat(signs)).slice(0,6));
+  LS.set('fm.lastSign',rec.sign);
+  resetForm();window.scrollTo({top:0,behavior:'smooth'});
+  await pushItem(item);
+};
+async function pushItem(item){
+  try{
+    await Relay.publish(S.pair.topic,await Relay.enc(S.key,{t:'e',id:item.id,rec:item.rec,newPost:item.newPost||'',ts:item.ts}));
+    if(item.st==='send'||item.st==='err')item.st='sent';item.sentAt=Date.now();item.err='';
+    toast('Skickad – datorn sparar i Excel');
+  }catch(e){item.st='err';item.err=navigator.onLine?'Kunde inte nå servern':'Ingen internetanslutning';}
+  saveOut();renderOut();ensureAckStream();
+}
+function resetForm(){
+  ['fCust','fInh','fSped','fFs','fPost'].forEach(function(id){$(id).value=''});
+  $('fDate').value=todayIso();$('fSign').value=LS.get('fm.lastSign','');
+  S.ai=null;S.shotId++;$('prev').classList.remove('on');$('an').innerHTML='';
+  ['cCustAi','cInh','cFs','cPost'].forEach(function(id){$(id).innerHTML=''});$('lblCustAi').classList.add('hide');
+  renderStatic();
+}
+function stLabel(o){
+  if(o.st==='send')return['wait','Skickar…'];
+  if(o.st==='sent')return['wait',(Date.now()-(o.sentAt||o.ts)>120000)?'Väntar på datorn':'Skickad'];
+  if(o.st==='q')return['q','Väntar – Excel-filen är låst'];
+  if(o.st==='ok')return['ok',o.dup?'Fanns redan i Excel':'Sparad i Excel · rad '+o.row];
+  return['err',o.err||'Fel'];
+}
+function renderOut(){
+  if(!S.out.length){$('out').innerHTML='<div class="empty">Inget skickat ännu.</div>';return}
+  $('out').innerHTML=S.out.slice(0,25).map(function(o){var s=stLabel(o),r=o.rec;
+    return'<div class="it" data-id="'+o.id+'"><div class="t"><b>'+esc(r.tillFran)+'</b><span class="st '+s[0]+'">'+esc(s[1])+'</span></div>'+
+      '<div class="m">'+esc((r.ankomst?'In ':'Ut ')+(r.ankomst||r.avgang))+' · '+esc(r.sign)+' · '+esc(r.innehall)+'</div>'+
+      '<div class="m" style="font-family:ui-monospace,Menlo,Consolas,monospace">'+esc([r.speditor,r.fraktsedel].filter(Boolean).join(' · ')||'–')+'</div>'+
+      (o.st==='err'?'<div class="act"><button data-a="retry">Skicka igen</button><button data-a="del">Ta bort</button></div>':'')+'</div>'}).join('');
+}
+$('out').onclick=function(e){var b=e.target.closest('button');if(!b)return;var id=b.closest('.it').dataset.id,o=S.out.filter(function(x){return x.id===id})[0];if(!o)return;
+  if(b.dataset.a==='retry'){o.st='send';renderOut();pushItem(o)}else{S.out=S.out.filter(function(x){return x!==o});saveOut();renderOut()}};
+
+/* ฟังคำยืนยันจาก PC ที่หัวข้อ <topic>-a */
+function ensureAckStream(){
+  var pending=S.out.filter(function(o){return o.st==='sent'||o.st==='q'});
+  if(!pending.length||document.hidden){if(S.ackStream){S.ackStream.stop();S.ackStream=null}return}
+  if(S.ackStream)return;
+  var since=Math.floor(Math.min.apply(null,pending.map(function(o){return o.ts}))/1000)-120;
+  S.ackStream=Relay.stream(S.pair.topic+'-a',String(since),async function(m){
+    var a=await Relay.dec(S.key,m.message);if(!a||a.t!=='a')return;
+    var o=S.out.filter(function(x){return x.id===a.id})[0];if(!o||o.st==='ok')return;
+    if(a.ok){o.st='ok';o.row=a.row;o.dup=!!a.dup;toast(a.dup?'Raden fanns redan i Excel':'Sparad i Excel · rad '+a.row)}
+    else if(a.q){o.st='q'}
+    else{o.st='err';o.err=a.err||'Datorn kunde inte spara'}
+    saveOut();renderOut();
+    if(!S.out.some(function(x){return x.st==='sent'||x.st==='q'})&&S.ackStream){S.ackStream.stop();S.ackStream=null}
+  },function(on){setConn(on,on?'Ansluten':'Offline')});
+}
+function resendStale(){
+  S.out.forEach(function(o){
+    if(o.st==='err'&&/internet|servern/.test(o.err||''))pushItem(o);
+    else if((o.st==='sent'||o.st==='send')&&Date.now()-(o.sentAt||o.ts)>8*3600e3)pushItem(o);
+  });
+}
+setInterval(function(){if(S.key){renderOut();resendStale()}},30000);
+window.addEventListener('online',function(){if(S.key)resendStale()});
+document.addEventListener('visibilitychange',function(){if(!S.key)return;ensureAckStream();if(!document.hidden){fetchLists();ping()}});
+
+/* ตรวจว่าเชื่อมต่อ relay ได้ */
+async function ping(){try{await Relay.poll(S.pair.topic+'-a',String(Math.floor(Date.now()/1000)));setConn(true,'Ansluten')}catch(e){setConn(false,'Offline')}}
+
+/* การตั้งค่า */
+$('bSet').onclick=function(){
+  $('setInfo').innerHTML=S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad';
+  $('sheet').classList.add('on')};
+$('bSetClose').onclick=function(){$('sheet').classList.remove('on')};
+$('sheet').onclick=function(e){if(e.target===$('sheet'))$('sheet').classList.remove('on')};
+$('bLists').onclick=function(){fetchLists(true)};
+$('bClearOut').onclick=function(){S.out=S.out.filter(function(o){return o.st!=='ok'});saveOut();renderOut();toast('Listan rensad')};
+$('bUnpair').onclick=function(){if(!confirm('Koppla bort mobilen? Du behöver skanna QR-koden igen.'))return;
+  try{localStorage.removeItem('fm.code');localStorage.removeItem('fm.lists')}catch(e){}
+  S.key=null;S.pair=null;S.lists=null;if(S.ackStream){S.ackStream.stop();S.ackStream=null}
+  $('sheet').classList.remove('on');showView()};
+
+// ══════════════════════════════════════════════════════════
+// 【M10】 เริ่มต้นระบบ
+// ══════════════════════════════════════════════════════════
+function startAfterPair(){renderListNote();resetForm();renderOut();fetchLists();ping();resendStale();ensureAckStream()}
+(async function(){
+  setType('in');
+  if(!window.isSecureContext||!crypto.subtle){document.body.insertAdjacentHTML('afterbegin','<div class="note bad" style="margin:12px">Sidan måste öppnas via https:// för att fungera.</div>');return}
+  var h=location.hash||'';
+  var fromHash=Relay.parseCode(decodeURIComponent(h));
+  if(fromHash){try{await pairWith(fromHash.code);toast('Mobilen är kopplad')}catch(e){}history.replaceState(null,'',location.pathname+location.search)}
+  else{var saved=LS.get('fm.code',null);if(saved){try{await pairWith(saved)}catch(e){}}}
+  showView();
+  if(S.key)startAfterPair();
+})();
+})();
+</script>
+</body>
+</html>
