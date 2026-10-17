@@ -369,9 +369,10 @@ function renderListNote(){
 
 // ══════════════════════════════════════════════════════════
 // 【M06】 อ่านรูป: บาร์โค้ด + ตัวอักษร (OCR)
-//   บาร์โค้ด: Android ใช้ BarcodeDetector ในตัว, iPhone ใช้ ZXing (โหลดจาก CDN)
+//   บาร์โค้ด: zxing-cpp (WebAssembly) ทั้ง Android และ iPhone, สำรองด้วย BarcodeDetector และ ZXing JS
 //   ตัวอักษร: Tesseract.js ภาษาสวีเดน+อังกฤษ (ครั้งแรกโหลด ~10 MB แล้วจำไว้)
 // ══════════════════════════════════════════════════════════
+var ZXWASM_URL='https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.4/dist/iife/reader/index.js';
 var ZXING_URL='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
 var TESS_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 var loaded={};
@@ -382,23 +383,53 @@ function toCanvas(img,max,rot){
   var c=document.createElement('canvas');c.width=rot?h:w;c.height=rot?w:h;var x=c.getContext('2d');
   if(rot){x.translate(h,0);x.rotate(Math.PI/2)}x.drawImage(img,0,0,w,h);return c;
 }
-async function readBarcodes(img){
-  var out=[];
-  if('BarcodeDetector' in window){
-    try{var bd=new BarcodeDetector();var r=await bd.detect(toCanvas(img,2400));r.forEach(function(x){if(x.rawValue)out.push(x.rawValue)})}catch(e){}
+function bandCanvas(img,max,y0,y1){
+  var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,sy=Math.round(h*y0),sh=Math.round(h*(y1-y0)),k=Math.min(1,max/Math.max(w,sh));
+  var c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(sh*k);c.getContext('2d').drawImage(img,0,sy,w,sh,0,0,c.width,c.height);return c;
+}
+function pixels(c){return c.getContext('2d').getImageData(0,0,c.width,c.height)}
+var BANDS=[[0,.45],[.3,.75],[.55,1],[.15,.6],[.4,.9]];
+function hasWaybill(a){return a.some(looksLikeWaybill)}
+/* อ่านบาร์โค้ด "ทุกอัน" ในรูป (ป้ายส่วนใหญ่มี 2 อัน: บาร์โค้ดเส้นทาง/รหัสไปรษณีย์ (421) และเลขพัสดุ (00))
+   ลำดับ: 1) zxing-cpp WebAssembly (อ่านได้หลายอัน ทนรอยยับ/เอียง)  2) BarcodeDetector ของ Android
+          3) ZXing JS แบบตัดรูปเป็นแถบๆ (เพราะอ่านได้ทีละอัน)  — หยุดทันทีเมื่อเจอเลขพัสดุ */
+async function readBarcodes(img,file,onStep){
+  var out=[];function add(v){v=String(v||'').trim();if(v&&out.indexOf(v)<0)out.push(v)}
+  try{
+    await loadScript(ZXWASM_URL);
+    var opt={tryHarder:true,maxNumberOfSymbols:12};
+    var inputs=[function(){return file},function(){return pixels(toCanvas(img,1600))},function(){return pixels(toCanvas(img,1000))}]
+      .concat(BANDS.map(function(b){return function(){return pixels(bandCanvas(img,1400,b[0],b[1]))}}))
+      .concat([function(){return pixels(toCanvas(img,1400,true))}]);
+    for(var i=0;i<inputs.length&&!hasWaybill(out);i++){
+      onStep&&onStep(i);
+      try{var r=await ZXingWASM.readBarcodes(inputs[i](),opt);(r||[]).forEach(function(x){if(x&&x.isValid!==false)add(x.text)})}catch(e){}
+    }
+  }catch(e){}
+  if(!hasWaybill(out)&&'BarcodeDetector' in window){
+    try{var bd=new BarcodeDetector();
+      var cs=[toCanvas(img,2400),toCanvas(img,1400),toCanvas(img,900)].concat(BANDS.map(function(b){return bandCanvas(img,1400,b[0],b[1])}));
+      for(var j=0;j<cs.length&&!hasWaybill(out);j++){try{(await bd.detect(cs[j])).forEach(function(x){add(x.rawValue)})}catch(e){}}
+    }catch(e){}
   }
-  if(!out.length){
+  if(!hasWaybill(out)){
     try{
       await loadScript(ZXING_URL);
       var hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
       var reader=new ZXing.BrowserMultiFormatReader(hints);
-      for(var rot=0;rot<2&&!out.length;rot++){
-        var cimg=await loadImg(toCanvas(img,1800,!!rot).toDataURL('image/jpeg',.92));
-        try{var res=await reader.decodeFromImageElement(cimg);if(res&&res.getText())out.push(res.getText())}catch(e){}
+      var vs=[toCanvas(img,1800),toCanvas(img,1100)].concat(BANDS.map(function(b){return bandCanvas(img,1400,b[0],b[1])})).concat([toCanvas(img,1600,true)]);
+      for(var k=0;k<vs.length&&!hasWaybill(out);k++){
+        var cimg=await loadImg(vs[k].toDataURL('image/jpeg',.92));
+        try{var res=await reader.decodeFromImageElement(cimg);if(res&&res.getText())add(res.getText())}catch(e){}
       }
     }catch(e){}
   }
-  return uniq(out);
+  return out;
+}
+/* บาร์โค้ด GS1 (421) = ประเทศ + รหัสไปรษณีย์ผู้รับ เช่น (421)752 33596 → 335 96 */
+function gs1Zip(codes){
+  for(var i=0;i<codes.length;i++){var m=String(codes[i]).replace(/^\][A-Za-z]\d/,'').match(/^\(?421\)?752(\d{5})/);if(m)return m[1]}
+  return'';
 }
 async function ocr(img,onProg){
   await loadScript(TESS_URL);
@@ -422,6 +453,7 @@ function carrierFromCode(raw){
   if(/^1Z[0-9A-Z]{16}$/.test(c))return'UPS';
   if(/^J?JD\d{16,20}$/.test(c))return'DHL';
   if(/^003909999/.test(c))return'Dachser';
+  if(/^0057313/.test(c))return'Postnord';
   if(/^[A-Z]{2}\d{9}SE$/.test(c))return'Postnord';
   return'';
 }
@@ -436,7 +468,7 @@ function fmtWaybill(raw,sped){
 }
 function looksLikeWaybill(raw){
   var c=cleanCode(raw).replace(/[\s()]/g,'');
-  if(/^https?:/i.test(c)||c.length<8||c.length>40)return false;
+  if(/^https?:/i.test(c)||c.length<8||c.length>40||/^421\d/.test(c))return false;
   return /^\d{8,20}$/.test(c)||/^00\d{18}$/.test(c)||/^1Z[0-9A-Z]{16}$/i.test(c)||/^J?JD\d{16,20}$/i.test(c)||/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(c);
 }
 function waybillScore(raw){var c=cleanCode(raw).replace(/[\s()]/g,'');if(/^00\d{18}$/.test(c)||/^1Z/i.test(c)||/^J?JD/i.test(c))return 3;if(/^\d{10,12}$/.test(c))return 2;return 1}
@@ -452,15 +484,17 @@ function findCarriers(text,codes){
   return hits;
 }
 var STOP={ab:1,aktiebolag:1,och:1,the:1,ltd:1,gmbh:1,inc:1,oy:1,as:1,kg:1,sa:1,srl:1,hb:1,kb:1,co:1};
-function findCustomers(text){
-  var C=(S.lists&&S.lists.customers)||[];if(!C.length||!text)return[];
+function findCustomers(text,zip){
+  var C=(S.lists&&S.lists.customers)||[];if(!C.length||(!text&&!zip))return[];text=text||'';
   var t=' '+norm(text)+' ',words={},digits=text.replace(/\D/g,'');t.split(' ').forEach(function(w){words[w]=1});
   var res=[];
   C.forEach(function(c){
     if(OWN.test(c.name))return;
     var toks=norm(c.name).split(' ').filter(function(w){return w.length>=3&&!STOP[w]});if(!toks.length)return;
-    var hit=toks.filter(function(w){return words[w]}).length;if(!hit)return;
-    var sc=hit/toks.length;
+    var hit=toks.filter(function(w){return words[w]}).length;
+    var pz0=(c.postnr||'').replace(/\D/g,''),zipHit=!!zip&&pz0===zip;
+    if(!hit&&!zipHit)return;
+    var sc=hit/toks.length+(zipHit?(hit?.6:.5):0);
     if(t.indexOf(' '+norm(c.name)+' ')>=0)sc+=.5;
     var pz=(c.postnr||'').replace(/\D/g,'');if(pz.length===5&&digits.indexOf(pz)>=0)sc+=.4;
     var town=norm((c.postnr||'').replace(/[\d\s]+/,' ')).split(' ').filter(function(w){return w.length>=4});
@@ -543,12 +577,14 @@ async function analyse(file){
   S.ai={customers:[],carriers:[],waybills:[],projects:[],postnr:[]};renderAi();
   var img;try{img=await loadImg(url)}catch(e){anLine('e','Kunde inte läsa bilden');return}
   anLine('bc','Letar streckkod…',true);
-  var codes=await readBarcodes(img);if(my!==S.shotId)return;
+  var codes=await readBarcodes(img,file,function(i){if(my===S.shotId&&i)anLine('bc','Letar streckkod… försök '+(i+1),true)});if(my!==S.shotId)return;
   var wb=codes.filter(looksLikeWaybill).sort(function(a,b){return waybillScore(b)-waybillScore(a)});
-  S.ai.waybills=wb;S.ai.carriers=findCarriers('',wb);
+  S.ai.waybills=wb;S.ai.carriers=findCarriers('',wb);S.ai.zip=gs1Zip(codes);
+  if(S.ai.zip)S.ai.customers=findCustomers('',S.ai.zip);
   if(S.ai.carriers.length&&!$('fSped').value)$('fSped').value=S.ai.carriers[0];
   if(wb.length&&!$('fFs').value)$('fFs').value=fmtWaybill(wb[0],$('fSped').value);
-  anLine('bc',wb.length?'Streckkod: <b>'+esc(fmtWaybill(wb[0],$('fSped').value))+'</b>':'Ingen streckkod hittades');
+  anLine('bc',wb.length?'Streckkod: <b>'+esc(fmtWaybill(wb[0],$('fSped').value))+'</b>'+(S.ai.zip?' · mottagare postnr '+S.ai.zip.slice(0,3)+' '+S.ai.zip.slice(3):''):
+    codes.length?'Streckkod lästes men innehöll inget fraktsedelsnummer – ta en ny bild närmare':'Ingen streckkod hittades – håll mobilen rakt över etiketten');
   renderAi();
   anLine('ocr','Läser texten…',true);
   var text='';
@@ -556,7 +592,7 @@ async function analyse(file){
   catch(e){if(my===S.shotId)anLine('ocr','Textläsning ej tillgänglig ('+esc(e.message)+')');return}
   if(my!==S.shotId)return;
   var a=S.ai;
-  a.customers=findCustomers(text);
+  a.customers=findCustomers(text,a.zip);
   a.carriers=uniq(a.carriers.concat(findCarriers(text,wb)));
   a.projects=findProjects(text);
   a.postnr=findPostnr(text);
