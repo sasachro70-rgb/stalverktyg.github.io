@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <!-- ══════════════════════════════════════════════════════════
-     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel)
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
      วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
 
        【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
@@ -137,6 +137,85 @@ main{padding:14px 16px;max-width:620px;margin:0 auto;display:grid;gap:14px}
 .toast{background:var(--brand);color:var(--brand-ink);border-radius:14px;padding:12px 16px;font-weight:500;box-shadow:0 12px 30px rgba(0,0,0,.25);max-width:560px;margin:0 auto}
 .toast.bad{background:var(--bad);color:#fff}
 .hide{display:none!important}
+/* 【M01b】 V1.2 ดีไซน์ใหม่ Blue & White (ชั้นแสดงผลเท่านั้น) */
+:root{--bg:#f3f6fb;--surface:#fff;--surface2:#f5f8fc;--line:#e1e8f1;--line2:#edf2f8;--ink:#0f1b2d;--mute:#56657d;--faint:#94a3b8;--brand:#1d4ed8;--brand-ink:#fff;--ring:#2563eb;
+  --shadow:0 1px 2px rgba(15,39,71,.04),0 6px 18px rgba(15,39,71,.06)}
+@media (prefers-color-scheme:dark){:root{--brand:#3b82f6;--brand-ink:#fff;--ring:#60a5fa}}
+header{background:linear-gradient(90deg,#0f2747,#1e3a8a);border-bottom:0;color:#fff;box-shadow:0 2px 12px rgba(15,39,71,.2)}
+.hb h1{color:#fff;letter-spacing:.04em}.hb h1 small{color:#bfdbfe}
+.hb .ib{color:#e2e8f0}.hb .ib:active{background:rgba(255,255,255,.14)}
+.dot{border-color:rgba(255,255,255,.22);color:#e2e8f0;background:rgba(255,255,255,.08)}
+.dot.on i{background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.25)}
+.card{border-radius:20px}
+.card h2{color:#64748b}
+.pair h2{color:var(--ink)}
+.cap .btn.pri{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:0;box-shadow:0 10px 22px rgba(37,99,235,.28)}
+.btn.pri{background:var(--brand);border-color:var(--brand)}
+.pair .big{background:linear-gradient(135deg,#2563eb,#1e3a8a);color:#fff;box-shadow:0 10px 24px rgba(37,99,235,.3)}
+.seg button.on[data-k=in]{color:#047857}.seg button.on[data-k=out]{color:#1d4ed8}
+.chip.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.toast{background:#0f2747;color:#fff}
+#toast{right:76px}
+.help-fab{bottom:calc(16px + env(safe-area-inset-bottom))}
+body:has(#sendBar:not(.hide)) .help-fab{bottom:calc(92px + env(safe-area-inset-bottom))}
+body:has(#sendBar:not(.hide)) .help-hint{bottom:calc(148px + env(safe-area-inset-bottom))}
+body:has(#sendBar:not(.hide)) .help-panel{bottom:calc(150px + env(safe-area-inset-bottom))}
+/* 【HJÄLP】 CSS för hjälpknappen, hjälppanelen och rundturen */
+.help-fab{position:fixed;right:20px;bottom:20px;z-index:80;display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:12px 18px 12px 14px;
+  background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;font:600 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;cursor:pointer;
+  box-shadow:0 10px 24px rgba(29,78,216,.32),0 2px 6px rgba(15,23,42,.18);transition:transform .12s,box-shadow .12s}
+.help-fab svg{width:20px;height:20px;flex:none}
+.help-fab:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(29,78,216,.38)}
+.help-fab:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
+.help-fab.on{background:#0f2747}
+.help-hint{position:fixed;right:20px;bottom:76px;z-index:80;background:#0f2747;color:#fff;border-radius:12px;padding:10px 38px 10px 14px;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  box-shadow:0 12px 28px rgba(15,23,42,.3);cursor:pointer;max-width:260px;animation:hpIn .25s ease-out}
+.help-hint:after{content:"";position:absolute;right:30px;bottom:-6px;width:12px;height:12px;background:#0f2747;transform:rotate(45deg)}
+.help-hint button{position:absolute;right:6px;top:6px;border:0;background:transparent;color:#cbd5e1;width:26px;height:26px;border-radius:7px;cursor:pointer;display:grid;place-items:center}
+.help-hint button svg{width:14px;height:14px}
+.help-panel{position:fixed;right:20px;bottom:80px;z-index:85;width:min(420px,calc(100vw - 24px));max-height:min(78vh,720px);display:flex;flex-direction:column;
+  background:var(--surface,#fff);color:var(--ink,#0f172a);border:1px solid var(--line,#e2e8f0);border-radius:18px;box-shadow:0 24px 60px rgba(15,23,42,.28);overflow:hidden;
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;animation:hpIn .18s ease-out}
+.help-panel[hidden],.help-hint[hidden],.tour[hidden]{display:none!important}
+@keyframes hpIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.hp-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 12px 18px;background:linear-gradient(135deg,#0f2747,#1e3a8a);color:#fff}
+.hp-h small{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#bfdbfe;font-weight:700}
+.hp-h h3{margin:2px 0 0;font-size:17px}
+.hp-x{border:0;background:rgba(255,255,255,.12);color:#fff;width:34px;height:34px;border-radius:10px;cursor:pointer;display:grid;place-items:center}
+.hp-x svg{width:16px;height:16px}.hp-x:hover{background:rgba(255,255,255,.22)}
+.hp-b{padding:14px 16px 18px;overflow:auto;display:grid;gap:12px}
+.hp-now{background:color-mix(in srgb,#2563eb 9%,var(--surface,#fff));border:1px solid color-mix(in srgb,#2563eb 28%,var(--line,#e2e8f0));color:var(--ink,#0f172a);border-radius:12px;padding:10px 12px;font-size:13px}
+.hp-now b{color:#1d4ed8}
+.hp-tour{display:flex;gap:12px;align-items:center;text-align:left;width:100%;border:1px solid var(--line,#e2e8f0);background:var(--surface2,#f8fafc);border-radius:14px;padding:12px 14px;cursor:pointer;color:inherit;font:inherit}
+.hp-tour:hover{border-color:#93c5fd}
+.hp-tour svg{width:18px;height:18px;flex:none;color:#fff;background:#2563eb;border-radius:50%;padding:9px;box-sizing:content-box}
+.hp-tour b{display:block;font-size:14px}.hp-tour small{color:var(--mute,#64748b);font-size:12px}
+.hp-intro{margin:0;color:var(--mute,#64748b);font-size:13px}
+.hp-topics{display:grid;gap:8px}
+.hp-topics details{border:1px solid var(--line,#e2e8f0);border-radius:12px;background:var(--surface,#fff)}
+.hp-topics summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 12px;font-weight:600;font-size:14px}
+.hp-topics summary::-webkit-details-marker{display:none}
+.hp-topics summary:after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--faint,#94a3b8);border-bottom:2px solid var(--faint,#94a3b8);transform:rotate(45deg);transition:transform .15s}
+.hp-topics details[open] summary:after{transform:rotate(-135deg)}
+.hp-topics .n{width:24px;height:24px;border-radius:8px;background:#dbeafe;color:#1d4ed8;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.hp-c{padding:0 14px 12px 46px;font-size:13px;color:var(--ink,#0f172a)}
+.hp-c ol,.hp-c ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.hp-c p{margin:0 0 6px}
+.hp-c kbd{font:600 11px ui-monospace,Consolas,monospace;border:1px solid var(--line,#e2e8f0);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--surface2,#f8fafc)}
+.hp-c .ok{color:#047857;font-weight:600}.hp-c .warn{color:#b45309;font-weight:600}
+.tour{position:fixed;inset:0;z-index:95}
+.tour-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,23,42,.62),0 0 0 3px #60a5fa;transition:all .22s ease;pointer-events:none}
+.tour-card{position:fixed;background:var(--surface,#fff);color:var(--ink,#0f172a);border-radius:16px;padding:16px 16px 12px;box-shadow:0 20px 50px rgba(0,0,0,.35);transition:top .22s,left .22s;
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.tour-card small{color:#2563eb;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.tour-card h4{margin:4px 0 4px;font-size:16px}
+.tour-card p{margin:0 0 12px;color:var(--mute,#64748b);font-size:13.5px}
+.tour-b{display:flex;gap:8px;align-items:center}.tour-b span{flex:1}
+.tb{border:1px solid var(--line,#e2e8f0);background:var(--surface,#fff);color:inherit;border-radius:10px;padding:8px 12px;font:600 13px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;cursor:pointer}
+.tb.pri{background:#2563eb;border-color:#2563eb;color:#fff}.tb[disabled]{opacity:.4;cursor:default}
+@media(max-width:600px){.help-fab{right:14px;bottom:14px;padding:12px}.help-fab span{display:none}.help-panel{right:12px;left:12px;width:auto;bottom:74px;max-height:72vh}.help-hint{right:14px;bottom:70px}}
+@media print{.help-fab,.help-panel,.help-hint,.tour{display:none!important}}
+
 </style>
 </head>
 <body>
@@ -721,6 +800,116 @@ function startAfterPair(){renderListNote();resetForm();renderOut();fetchLists();
   if(S.key)startAfterPair();
 })();
 })();
+</script>
+
+<script>
+/* 【M11】 ผู้ช่วยแนะนำการใช้งานบนมือถือ (แก้ข้อความได้ที่นี่) */
+window.HELP_CFG = {
+  app: 'frakter-mobil', appName: 'Frakter – mobil',
+  intro: 'Med mobilen fotar du fraktsedeln och skickar uppgifterna till datorn, som sparar raden i Excel-filen Frakter.',
+  now: function(){
+    var pv = document.getElementById('pairView'), c = document.getElementById('conn');
+    if (pv && !pv.classList.contains('hide')) return 'Mobilen är inte kopplad ännu. Be den som har Frakter-appen öppen på datorn att klicka <b>Mobil</b> och visa QR-koden – skanna den med kameran.';
+    if (c && !c.classList.contains('on')) return 'Ingen kontakt just nu. Du kan ändå fota och skicka – raderna skickas när mobilen är online och sparas när datorn tar emot.';
+    return 'Klar att fota. Tryck <b>Fota fraktsedel</b>.';
+  },
+  topics: [
+    {t:'Koppla mobilen (första gången)', html:'<ol><li>På datorn: öppna Frakter-appen och klicka <b>Mobil</b>.</li><li>Skanna QR-koden med mobilens vanliga kamera – sidan öppnas och kopplas.</li><li>Lägg gärna sidan på hemskärmen (Dela → Lägg till på hemskärmen).</li></ol><p style="margin-top:6px">Har du fått en kod i stället? Klistra in den i rutan och tryck <b>Koppla</b>.</p>'},
+    {t:'Fota fraktsedeln', html:'<ul><li>Tryck <b>Fota fraktsedel</b> och fota hela sedeln rakt uppifrån.</li><li>Bra ljus och skarp bild ger bäst resultat – streckkoden läses automatiskt.</li><li>Bild från galleriet: tryck på bildknappen bredvid.</li></ul>'},
+    {t:'Kontrollera och fyll i', html:'<ol><li>Välj <b>Ankomst (in)</b> eller <b>Avgång (ut)</b>.</li><li>Kontrollera <b>datum</b> och skriv din <b>sign</b>.</li><li>Välj kund – förslag från bilden visas som knappar. Ny kund: ange postnummer.</li><li>Fyll i <b>innehåll</b>, <b>speditör</b> och <b>fraktsedelsnummer</b> (fylls ofta i från streckkoden).</li></ol>'},
+    {t:'Skicka och följ status', html:'<ol><li>Tryck <b>Skicka till Excel</b> längst ner.</li><li>Under <b>Skickade från den här mobilen</b> ser du status:</li></ol><ul style="margin-top:4px"><li><b>Väntar på datorn</b> – skickat, datorn har inte sparat än.</li><li><span class="warn">Väntar – Excel-filen är låst</span> – sparas automatiskt när filen stängs i Excel.</li><li><span class="ok">Sparad i Excel · rad …</span> – klart.</li></ul>'},
+    {t:'Säkerhet och inställningar', html:'<ul><li>Allt som skickas är krypterat med nyckeln i kopplingskoden. Meddelanden raderas från förmedlingstjänsten inom 12 timmar.</li><li>Kugghjulet: hämta kundlistan igen, rensa listan eller koppla bort mobilen.</li></ul>'}
+  ],
+  tour: [
+    {sel:'#pairCode|#bPair', t:'Koppla mobilen', d:'Skanna QR-koden på datorn med kameran, eller klistra in koden här.'},
+    {sel:'#bCam', t:'Fota fraktsedeln', d:'Tryck här och fota hela fraktsedeln. Uppgifterna läses av automatiskt.'},
+    {sel:'#typeSeg', t:'Ankomst eller avgång', d:'Välj om godset kommer in eller går ut.'},
+    {sel:'#fCust', t:'Kund', d:'Välj kunden – förslag visas som knappar under fältet.'},
+    {sel:'#bSend', t:'Skicka', d:'Skickar raden till datorn som sparar den i Excel.'},
+    {sel:'#out', t:'Status', d:'Här ser du om raden är sparad i Excel.'},
+    {sel:'#bSet', t:'Inställningar', d:'Hämta kundlistan igen eller koppla bort mobilen.'},
+    {sel:'#helpFab', t:'Hjälp', d:'Tryck här när du vill läsa instruktionerna igen.'}
+  ]
+};
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════
+   【HJÄLP】 ผู้ช่วยแนะนำการใช้งาน (ปุ่ม "Hjälp" มุมขวาล่าง)
+   - แผงช่วยเหลือ: คำแนะนำตามสถานะตอนนี้ + หัวข้อวิธีใช้ทีละขั้น + ทัวร์นำชม (ไฮไลต์ปุ่มจริงบนจอ)
+   - ตั้งค่าเนื้อหาที่ window.HELP_CFG = {app, intro, now(), topics:[{t,html}], tour:[{sel,t,d}]}
+   - เปิดด้วยปุ่มหรือ F1, ปิดด้วย Esc; ครั้งแรกจะมีป้ายเล็ก "Ny här?" ชี้ที่ปุ่ม (จำด้วย localStorage)
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var C = window.HELP_CFG; if (!C) return;
+  var $ = function(id){ return document.getElementById(id); };
+  var LS = { get:function(k){ try { return localStorage.getItem('help.' + C.app + '.' + k); } catch (e) { return null; } },
+             set:function(k, v){ try { localStorage.setItem('help.' + C.app + '.' + k, v); } catch (e) {} } };
+  var Q = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.4h.01"/></svg>';
+  var X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  var PLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5l12 7-12 7z"/></svg>';
+  var wrap = document.createElement('div'); wrap.id = 'helpRoot';
+  wrap.innerHTML =
+    '<button type="button" class="help-fab" id="helpFab" aria-haspopup="dialog" aria-controls="helpPanel" title="Hjälp och guide (F1)">' + Q + '<span>Hjälp</span></button>' +
+    '<div class="help-hint" id="helpHint" hidden><b>Ny här?</b> Klicka för en snabb guide.<button type="button" id="helpHintX" aria-label="Stäng">' + X + '</button></div>' +
+    '<aside class="help-panel" id="helpPanel" role="dialog" aria-modal="false" aria-labelledby="helpTitle" hidden>' +
+      '<div class="hp-h"><div><small>' + C.appName + '</small><h3 id="helpTitle">Hjälp &amp; guide</h3></div><button type="button" class="hp-x" id="helpClose" aria-label="Stäng hjälpen">' + X + '</button></div>' +
+      '<div class="hp-b">' +
+        '<div class="hp-now" id="helpNow"></div>' +
+        '<button type="button" class="hp-tour" id="helpTour">' + PLAY + '<span><b>Visa guidad rundtur</b><small>Ca 1 minut – vi visar knapparna på skärmen</small></span></button>' +
+        '<p class="hp-intro">' + C.intro + '</p>' +
+        '<div class="hp-topics">' + C.topics.map(function(t, i){ return '<details' + (i === 0 ? ' open' : '') + '><summary><span class="n">' + (i + 1) + '</span>' + t.t + '</summary><div class="hp-c">' + t.html + '</div></details>'; }).join('') + '</div>' +
+      '</div>' +
+    '</aside>' +
+    '<div class="tour" id="tourLayer" hidden><div class="tour-hole" id="tourHole"></div>' +
+      '<div class="tour-card" id="tourCard" role="dialog" aria-live="polite"><small id="tourStep"></small><h4 id="tourT"></h4><p id="tourD"></p>' +
+      '<div class="tour-b"><button type="button" class="tb" id="tourEnd">Avsluta</button><span></span><button type="button" class="tb" id="tourPrev">Tillbaka</button><button type="button" class="tb pri" id="tourNext">Nästa</button></div></div></div>';
+  document.body.appendChild(wrap);
+
+  function renderNow(){ try { var n = C.now ? C.now() : ''; $('helpNow').innerHTML = n ? '<b>Just nu:</b> ' + n : ''; $('helpNow').hidden = !n; } catch (e) {} }
+  function open(){ renderNow(); $('helpPanel').hidden = false; $('helpFab').classList.add('on'); hideHint(true); setTimeout(function(){ $('helpClose').focus(); }, 30); }
+  function close(){ $('helpPanel').hidden = true; $('helpFab').classList.remove('on'); }
+  function toggle(){ $('helpPanel').hidden ? open() : close(); }
+  function hideHint(remember){ $('helpHint').hidden = true; if (remember) LS.set('seen', '1'); }
+  $('helpFab').onclick = toggle; $('helpClose').onclick = close;
+  $('helpHintX').onclick = function(e){ e.stopPropagation(); hideHint(true); };
+  $('helpHint').onclick = function(){ open(); };
+  if (!LS.get('seen')) setTimeout(function(){ if ($('helpPanel').hidden) $('helpHint').hidden = false; }, 1200);
+
+  /* ---- rundtur ---- */
+  var steps = [], k = 0;
+  function visible(el){ if (!el) return false; var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; }
+  function pick(sel){ var a = sel.split('|'); for (var i = 0; i < a.length; i++) { var e = document.querySelector(a[i]); if (visible(e)) return e; } return null; }
+  function show(){
+    var s = steps[k], el = s.el, hole = $('tourHole'), card = $('tourCard');
+    el.scrollIntoView({block:'nearest', inline:'nearest'});
+    var r = el.getBoundingClientRect(), pad = 6;
+    hole.style.left = (r.left - pad) + 'px'; hole.style.top = (r.top - pad) + 'px'; hole.style.width = (r.width + pad * 2) + 'px'; hole.style.height = (r.height + pad * 2) + 'px';
+    $('tourStep').textContent = 'Steg ' + (k + 1) + ' av ' + steps.length; $('tourT').textContent = s.t; $('tourD').innerHTML = s.d;
+    $('tourPrev').disabled = k === 0; $('tourNext').textContent = k === steps.length - 1 ? 'Klar' : 'Nästa';
+    var cw = Math.min(340, innerWidth - 24), ch = card.offsetHeight || 170, left = Math.min(Math.max(12, r.left), innerWidth - cw - 12), top = r.bottom + 14;
+    if (top + ch > innerHeight - 12) top = Math.max(12, r.top - ch - 14);
+    card.style.width = cw + 'px'; card.style.left = left + 'px'; card.style.top = top + 'px';
+    setTimeout(function(){ $('tourNext').focus(); }, 20);
+  }
+  function tour(){
+    steps = C.tour.map(function(s){ return {el: pick(s.sel), t: s.t, d: s.d}; }).filter(function(s){ return s.el; });
+    if (!steps.length) return; close(); k = 0; $('tourLayer').hidden = false; document.body.classList.add('touring'); show(); LS.set('seen', '1');
+  }
+  function endTour(){ $('tourLayer').hidden = true; document.body.classList.remove('touring'); $('helpFab').focus(); }
+  $('helpTour').onclick = tour; $('tourEnd').onclick = endTour;
+  $('tourPrev').onclick = function(){ if (k > 0) { k--; show(); } };
+  $('tourNext').onclick = function(){ if (k < steps.length - 1) { k++; show(); } else endTour(); };
+  addEventListener('resize', function(){ if (!$('tourLayer').hidden) show(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'F1') { e.preventDefault(); toggle(); return; }
+    if (e.key === 'Escape') { if (!$('tourLayer').hidden) { endTour(); e.stopPropagation(); } else if (!$('helpPanel').hidden) { close(); } }
+    if (!$('tourLayer').hidden && (e.key === 'ArrowRight' || e.key === 'Enter')) { e.preventDefault(); $('tourNext').click(); }
+    if (!$('tourLayer').hidden && e.key === 'ArrowLeft') { e.preventDefault(); $('tourPrev').click(); }
+  }, true);
+  window.HelpKit = {open: open, close: close, tour: tour};
+})();
+
 </script>
 </body>
 </html>
