@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <!-- ══════════════════════════════════════════════════════════
-     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
      วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
 
        【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
@@ -12,6 +12,7 @@
        【M05】 ตัวแปรหลัก การจับคู่ รายชื่อลูกค้า/ผู้ขนส่งจาก PC
        【M06】 อ่านรูป: บาร์โค้ด (BarcodeDetector / ZXing) + ตัวอักษร (Tesseract OCR)
        【M07】 แยกข้อมูลจากรูป: ผู้ขนส่ง ลูกค้า เลขใบขนส่ง เลขโปรเจกต์
+       【M07b】 UPS ต่างประเทศ: หาเลข SHP# (GF…) บนป้าย ด้วย OCR เฉพาะจุด + ตรวจกับเลขบัญชีในบาร์โค้ด 1Z
        【M08】 ฟอร์มและคำแนะนำ (ชิป)
        【M09】 ส่งไปยัง PC + กล่องขาออก + รับการยืนยัน "บันทึกใน Excel แล้ว"
        【M10】 เริ่มต้นระบบ
@@ -514,7 +515,8 @@ async function ocr(img,onProg){
   await loadScript(TESS_URL);
   if(!S.ocrWorker)S.ocrWorker=Tesseract.createWorker(['swe','eng'],1,{logger:function(m){if(m.status==='recognizing text'&&onProg)onProg(m.progress)}});
   var w=await S.ocrWorker;
-  var r=await w.recognize(toCanvas(img,2000));
+  var cv=toCanvas(img,2000),r=await w.recognize(cv);
+  S.lastOcr={canvas:cv,img:img,data:(r&&r.data)||{}};
   return (r&&r.data&&r.data.text)||'';
 }
 
@@ -529,7 +531,7 @@ function g4(s){return s.replace(/(.{4})(?=.)/g,'$1 ')}
 function cleanCode(raw){return String(raw||'').replace(/^\][A-Za-z]\d/,'').replace(/[\x00-\x1f]/g,'').trim()}
 function carrierFromCode(raw){
   var c=cleanCode(raw).replace(/[\s()]/g,'').toUpperCase();
-  if(/^1Z[0-9A-Z]{16}$/.test(c))return'UPS';
+  if(/^1Z[0-9A-Z]{16}$/.test(c)||isShp(c))return'UPS';
   if(/^J?JD\d{16,20}$/.test(c))return'DHL';
   if(/^003909999/.test(c))return'Dachser';
   if(/^0057313/.test(c))return'Postnord';
@@ -538,6 +540,7 @@ function carrierFromCode(raw){
 }
 function fmtWaybill(raw,sped){
   var s=cleanCode(raw),c=s.replace(/[\s()]/g,'').toUpperCase(),m,sp=norm(sped);
+  if(isShp(c))return c.slice(0,4)+' '+c.slice(4,8)+' '+c.slice(8);                 // V1.3: UPS SHP# som på etiketten: GF11 264C 3NX
   if(/^1Z[0-9A-Z]{16}$/.test(c))return'1Z '+c.slice(2,5)+' '+c.slice(5,8)+' '+c.slice(8,10)+' '+c.slice(10,14)+' '+c.slice(14);
   if((m=c.match(/^00(\d{18})$/)))return'(00) '+(/dachser/.test(sp)||/^3909999/.test(m[1])?grp(m[1],[4,4,4,3,3]):g3(m[1]));
   if((m=c.match(/^J?(JD\d{16,20})$/)))return'(J) '+g4(m[1]);
@@ -548,9 +551,9 @@ function fmtWaybill(raw,sped){
 function looksLikeWaybill(raw){
   var c=cleanCode(raw).replace(/[\s()]/g,'');
   if(/^https?:/i.test(c)||c.length<8||c.length>40||/^421\d/.test(c))return false;
-  return /^\d{8,20}$/.test(c)||/^00\d{18}$/.test(c)||/^1Z[0-9A-Z]{16}$/i.test(c)||/^J?JD\d{16,20}$/i.test(c)||/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(c);
+  return isShp(c.toUpperCase())||/^\d{8,20}$/.test(c)||/^00\d{18}$/.test(c)||/^1Z[0-9A-Z]{16}$/i.test(c)||/^J?JD\d{16,20}$/i.test(c)||/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(c);
 }
-function waybillScore(raw){var c=cleanCode(raw).replace(/[\s()]/g,'');if(/^00\d{18}$/.test(c)||/^1Z/i.test(c)||/^J?JD/i.test(c))return 3;if(/^\d{10,12}$/.test(c))return 2;return 1}
+function waybillScore(raw){var c=cleanCode(raw).replace(/[\s()]/g,'');if(isShp(c.toUpperCase()))return 4;if(/^00\d{18}$/.test(c)||/^1Z/i.test(c)||/^J?JD/i.test(c))return 3;if(/^\d{10,12}$/.test(c))return 2;return 1}
 var CARRIERS=['DSV','DHL','Postnord','DB Schenker','Schenker','Dachser','Bring','UPS','FedEx','TNT','GLS','BBG','Gnosjö trafik','Bussgods','Transportören AB','Jetpak','Budbee','Instabox','Fraktkompaniet','Stena Recycling','Vestbo Emballage','FMAB'];
 function canonSped(name){var L=(S.lists&&S.lists.speditors)||[],k=norm(name);for(var i=0;i<L.length;i++)if(norm(L[i])===k)return L[i];
   for(i=0;i<L.length;i++)if(norm(L[i]).indexOf(k)>=0||k.indexOf(norm(L[i]))>=0)return L[i];return name}
@@ -595,6 +598,77 @@ function findTextWaybills(text){
   return out.slice(0,4);
 }
 function findPostnr(text){var m=String(text||'').match(/\b(\d{3})\s?(\d{2})\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö-]{2,})/g)||[];return uniq(m.map(function(x){return x.replace(/^(\d{3})\s?(\d{2})\s+/,'$1 $2 ')})).slice(0,3)}
+
+// ══════════════════════════════════════════════════════════
+// 【M07b】 UPS ต่างประเทศ: ใช้เลข SHP# (เช่น GF11 264C 3NX) เป็น Fraktsedels nr. แทนเลขพัสดุ 1Z
+//   - ป้าย UPS ต่างประเทศมี "SHP#: GF.." (เลขชิปเมนต์ ใช้ร่วมกันทุกกล่องของชิปเมนต์ "1 OF 2")
+//   - SHP# ขึ้นต้นด้วยเลขบัญชีผู้ส่ง 6 ตัว ซึ่งอยู่ในบาร์โค้ด 1Z ด้วย (1Z GF1126 04 … → GF1126 4C3NX)
+//     จึงใช้ตรวจว่า OCR อ่านถูก (ตัด I/1, 4/1, S/3 ที่อ่านผิดทิ้ง)
+//   - OCR ทั้งภาพมักอ่านบรรทัด SHP# ไม่ออก (อยู่ข้างโลโก้กลม "3+ KG") → หาคำ "DATE:"/"SHP#" แล้วอ่านเฉพาะบริเวณนั้นซ้ำ
+//     หลายแบบ (ขยาย 2×/3×, ขาวดำ, หมุน ±3°/±6°) จนได้ผลที่ตรงกัน 2 ครั้ง
+//   ปัญหา: อ่านไม่ได้ → ข้อความเตือนให้ถ่ายใหม่ให้ชัด เลข 1Z ยังอยู่ในช่องให้แก้เอง
+// ══════════════════════════════════════════════════════════
+var SHP_PREFIX=['GF'];   // ใช้เลข SHP# เฉพาะเมื่อขึ้นต้นด้วย (เพิ่มได้ เช่น ['GF','AB'])
+function shpRe(){return new RegExp('(?:'+SHP_PREFIX.join('|')+')[0-9A-Z]{2}\\s?[0-9A-Z]{4}\\s?[0-9A-Z]{3}(?![0-9A-Z])','g')}
+function isShp(c){return SHP_PREFIX.some(function(p){return c.indexOf(p)===0})&&/^[0-9A-Z]{11}$/.test(c)}
+function shpCands(text){var out=[],m,re=shpRe(),s=String(text||'').toUpperCase();while((m=re.exec(s)))out.push(m[0].replace(/\s/g,''));return out}
+/* เลขบัญชีผู้ส่ง UPS (6 ตัว) จากบาร์โค้ด 1Z หรือจากข้อความ "TRACKING #: 1Z GF1 126 04 …" */
+function upsAccount(codes,text){
+  for(var i=0;i<codes.length;i++){var m=cleanCode(codes[i]).replace(/[\s()]/g,'').toUpperCase().match(/^1Z([0-9A-Z]{6})[0-9A-Z]{10}$/);if(m)return m[1]}
+  var t=String(text||'').toUpperCase().replace(/\s/g,'').match(/1Z([0-9A-Z]{6})[0-9A-Z]{10}/);return t?t[1]:'';
+}
+function ocrWords(d){
+  if(d.words&&d.words.length)return d.words;
+  var o=[];(d.blocks||[]).forEach(function(b){(b.paragraphs||[]).forEach(function(p){(p.lines||[]).forEach(function(l){(l.words||[]).forEach(function(w){o.push(w)})})})});return o;
+}
+/* ตัดส่วนจากภาพ (box = พิกัดในภาพต้นทาง) แล้วย่อ/ขยายให้ความสูงตัวอักษร ≈ v.th พิกเซล (OCR อ่านดีที่สุด) */
+function cropVariant(src,box,h,v){
+  var w=box[2]-box[0],hh=box[3]-box[1],k=v.th/h,sw=w*k,sh=hh*k,rad=(v.rot||0)*Math.PI/180;
+  var cw=Math.round(Math.abs(sw*Math.cos(rad))+Math.abs(sh*Math.sin(rad))),ch=Math.round(Math.abs(sw*Math.sin(rad))+Math.abs(sh*Math.cos(rad)));
+  var c=document.createElement('canvas');c.width=cw;c.height=ch;var x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.translate(cw/2,ch/2);x.rotate(rad);x.imageSmoothingQuality='high';
+  x.drawImage(src,box[0],box[1],w,hh,-sw/2,-sh/2,sw,sh);
+  if(v.bw){var id=x.getImageData(0,0,cw,ch),p=id.data,lo=255,hi=0,i,g;
+    for(i=0;i<p.length;i+=4){g=(p[i]*299+p[i+1]*587+p[i+2]*114)/1000;if(g<lo)lo=g;if(g>hi)hi=g}
+    var th=lo+(hi-lo)*.55;for(i=0;i<p.length;i+=4){g=(p[i]*299+p[i+1]*587+p[i+2]*114)/1000>th?255:0;p[i]=p[i+1]=p[i+2]=g}
+    x.putImageData(id,0,0)}
+  return c;
+}
+function rotCanvas(cv,deg){var r=deg*Math.PI/180,w=cv.width,h=cv.height,cw=Math.round(Math.abs(w*Math.cos(r))+Math.abs(h*Math.sin(r))),ch=Math.round(Math.abs(w*Math.sin(r))+Math.abs(h*Math.cos(r)));
+  var c=document.createElement('canvas');c.width=cw;c.height=ch;var x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.translate(cw/2,ch/2);x.rotate(r);x.drawImage(cv,-w/2,-h/2);return c}
+/* ผลลัพธ์: {v:'GF11264C3NX', sure:true/false} หรือ null
+   ยอมรับเมื่ออ่านได้ตรงกันอย่างน้อย 2 ครั้ง และมากกว่าค่าอื่น (ถ้ามีเลขบัญชีจาก 1Z ต้องขึ้นต้นตรงกันด้วย) */
+async function findShp(acct,onStep){
+  var o=S.lastOcr||{},base=o.canvas;if(!base)return null;
+  var w=await S.ocrWorker,n=0,C=shpCands((o.data||{}).text);
+  function tally(){var cnt={};C.forEach(function(x){if(acct&&x.indexOf(acct)!==0)return;cnt[x]=(cnt[x]||0)+1});
+    var ks=Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a]});return{v:ks[0]||'',n:ks[0]?cnt[ks[0]]:0,n2:ks[1]?cnt[ks[1]]:0}}
+  var VARS=[{th:40},{th:58},{th:40,bw:1},{th:40,rot:3},{th:40,rot:-3},{th:40,rot:6},{th:40,rot:-6}];
+  var img=o.img,iw=img&&(img.naturalWidth||img.width),kOrig=img&&iw>base.width?iw/base.width:1;   // พิกัดบนภาพย่อ → ภาพเต็ม
+  async function rec(cv,psm){await w.setParameters({tessedit_pageseg_mode:psm});onStep&&onStep(++n);var r=await w.recognize(cv);var d=(r&&r.data)||{};C=C.concat(shpCands(d.text));return d}
+  try{
+    // ภาพที่ใช้หา "DATE:"/"SHP#": ภาพเดิม → ภาพเดิมแบบ psm 11 → หมุน +5° → หมุน −5°
+    var tries=[{cv:base,d:o.data||{}},{cv:base,psm:'11'},{deg:5},{deg:-5}];
+    for(var t=0;t<tries.length;t++){
+      var T=tries[t],cv=T.cv||rotCanvas(base,T.deg),d=T.d||await rec(cv,T.psm||'3');
+      var A=ocrWords(d).filter(function(x){return /^(SHP|DATE|0ATE)/i.test(x.text||'')});
+      for(var a=0;a<A.length;a++){
+        var bb=A[a].bbox,h=Math.max(10,bb.y1-bb.y0),isD=!/^SHP/i.test(A[a].text);
+        var box=[Math.max(0,Math.round(bb.x0-1.5*h)),Math.max(0,Math.round(bb.y0-(isD?4.5:1.5)*h)),Math.min(cv.width,Math.round(bb.x0+19*h)),Math.min(cv.height,Math.round(bb.y0+(isD?1.5:2.5)*h))];
+        if(box[2]-box[0]<20||box[3]-box[1]<10)continue;
+        var full=cv===base&&kOrig>1,src=full?img:cv,kk=full?kOrig:1,sbox=box.map(function(v){return Math.round(v*kk)});
+        for(var k=0;k<VARS.length;k++){
+          await rec(cropVariant(src,sbox,h*kk,VARS[k]),'6');
+          var q=tally();if(q.n>=3&&q.n>=q.n2+2)return{v:q.v,sure:true};
+        }
+        if(tally().n)break;
+      }
+      if(tally().n)break;
+    }
+  }finally{try{await w.setParameters({tessedit_pageseg_mode:'3'})}catch(e){}}
+  var f=tally();if(!f.n)return null;
+  return{v:f.v,sure:!!acct&&f.n>=2&&f.n>f.n2};
+}
 
 // ══════════════════════════════════════════════════════════
 // 【M08】 ฟอร์มและคำแนะนำ (ชิป)
@@ -651,7 +725,7 @@ $('bPick').onclick=function(){$('inPick').value='';$('inPick').click()};
 $('inCam').onchange=$('inPick').onchange=function(){var f=this.files&&this.files[0];if(f)analyse(f)};
 function anLine(id,html,busy){var el=$('an_'+id);if(!el){el=document.createElement('div');el.id='an_'+id;$('an').appendChild(el)}el.innerHTML=(busy?'<i class="spin"></i>':'')+html}
 async function analyse(file){
-  var my=++S.shotId,url=URL.createObjectURL(file);
+  var my=++S.shotId,url=URL.createObjectURL(file);S.preFs=$('fFs').value.trim();   // V1.3: egen text i fältet skrivs inte över
   $('prevImg').src=url;$('prev').classList.add('on');$('an').innerHTML='';
   S.ai={customers:[],carriers:[],waybills:[],projects:[],postnr:[]};renderAi();
   var img;try{img=await loadImg(url)}catch(e){anLine('e','Kunde inte läsa bilden');return}
@@ -679,6 +753,22 @@ async function analyse(file){
   if(!$('fCust').value&&a.customers[0]&&(a.customers.length===1||a.customers[0].sc>a.customers[1].sc))$('fCust').value=a.customers[0].name;
   if(!$('fSped').value&&a.carriers[0])$('fSped').value=a.carriers[0];
   if(!$('fFs').value&&a.waybills[0])$('fFs').value=fmtWaybill(a.waybills[0],$('fSped').value);
+  /* V1.3 【M07b】 UPS utrikes: SHP#-numret (GF…) ersätter 1Z-numret om användaren inte själv ändrat fältet */
+  var acct=upsAccount(codes,text),autoFs=$('fFs').value,userFs=S.preFs&&S.preFs!==S.lastAutoFs;
+  if((acct&&isShp(acct+'AAAAA'))||(!acct&&(/SHP\s*#/i.test(text)||shpCands(text).length))){
+    anLine('shp','Letar UPS-sändningsnummer (SHP#)…',true);
+    var shp=null;try{shp=await findShp(acct,function(n){if(my===S.shotId)anLine('shp','Letar UPS-sändningsnummer (SHP#)… försök '+n,true)})}catch(e){}
+    if(my!==S.shotId)return;
+    if(shp){
+      a.waybills=[shp.v].concat(a.waybills.filter(function(x){return cleanCode(x).replace(/[\s()]/g,'').toUpperCase()!==shp.v}));
+      a.carriers=uniq([canonSped('UPS')].concat(a.carriers));
+      if(!$('fSped').value)$('fSped').value=canonSped('UPS');
+      var shpF=fmtWaybill(shp.v,'UPS'),cur=$('fFs').value;
+      if(!userFs&&(!cur||cur===autoFs)){$('fFs').value=shpF;S.lastAutoFs=shpF}
+      var used=$('fFs').value===shpF;
+      anLine('shp',(shp.sure?'':'⚠ ')+'UPS utrikes: sändningsnr <b>'+esc(shpF)+'</b> '+(used?'används som fraktsedelsnr':'hittades – tryck på knappen nedan för att använda det')+(shp.sure?'':' – kontrollera mot etiketten (SHP#)'));
+    }else anLine('shp','⚠ UPS-sändningsnumret (SHP# '+esc(acct?acct.slice(0,2):SHP_PREFIX[0])+'…) kunde inte läsas säkert – fota etiketten rakt och skarpt igen, eller skriv in numret från etiketten');
+  }
   var found=[];if(a.customers.length)found.push('kund');if(a.carriers.length)found.push('speditör');if(a.projects.length)found.push('projektnr');
   anLine('ocr',found.length?'Hittade: <b>'+found.join(', ')+'</b> – kontrollera nedan':'Ingen känd text hittades – fyll i nedan');
   renderAi();
@@ -815,7 +905,7 @@ window.HELP_CFG = {
   },
   topics: [
     {t:'Koppla mobilen (första gången)', html:'<ol><li>På datorn: öppna Frakter-appen och klicka <b>Mobil</b>.</li><li>Skanna QR-koden med mobilens vanliga kamera – sidan öppnas och kopplas.</li><li>Lägg gärna sidan på hemskärmen (Dela → Lägg till på hemskärmen).</li></ol><p style="margin-top:6px">Har du fått en kod i stället? Klistra in den i rutan och tryck <b>Koppla</b>.</p>'},
-    {t:'Fota fraktsedeln', html:'<ul><li>Tryck <b>Fota fraktsedel</b> och fota hela sedeln rakt uppifrån.</li><li>Bra ljus och skarp bild ger bäst resultat – streckkoden läses automatiskt.</li><li>Bild från galleriet: tryck på bildknappen bredvid.</li></ul>'},
+    {t:'Fota fraktsedeln', html:'<ul><li>Tryck <b>Fota fraktsedel</b> och fota hela sedeln rakt uppifrån.</li><li>Bra ljus och skarp bild ger bäst resultat – streckkoden läses automatiskt.</li><li><b>UPS från utlandet</b> (etikett med <b>SHP#: GF…</b>): sändningsnumret, t.ex. <i>GF11 264C 3NX</i>, används som fraktsedelsnr i stället för 1Z-numret. Det tar några sekunder extra.</li><li>Bild från galleriet: tryck på bildknappen bredvid.</li></ul>'},
     {t:'Kontrollera och fyll i', html:'<ol><li>Välj <b>Ankomst (in)</b> eller <b>Avgång (ut)</b>.</li><li>Kontrollera <b>datum</b> och skriv din <b>sign</b>.</li><li>Välj kund – förslag från bilden visas som knappar. Ny kund: ange postnummer.</li><li>Fyll i <b>innehåll</b>, <b>speditör</b> och <b>fraktsedelsnummer</b> (fylls ofta i från streckkoden).</li></ol>'},
     {t:'Skicka och följ status', html:'<ol><li>Tryck <b>Skicka till Excel</b> längst ner.</li><li>Under <b>Skickade från den här mobilen</b> ser du status:</li></ol><ul style="margin-top:4px"><li><b>Väntar på datorn</b> – skickat, datorn har inte sparat än.</li><li><span class="warn">Väntar – Excel-filen är låst</span> – sparas automatiskt när filen stängs i Excel.</li><li><span class="ok">Sparad i Excel · rad …</span> – klart.</li></ul>'},
     {t:'Säkerhet och inställningar', html:'<ul><li>Allt som skickas är krypterat med nyckeln i kopplingskoden. Meddelanden raderas från förmedlingstjänsten inom 12 timmar.</li><li>Kugghjulet: hämta kundlistan igen, rensa listan eller koppla bort mobilen.</li></ul>'}
