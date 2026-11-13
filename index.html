@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <!-- ══════════════════════════════════════════════════════════
-     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.5 2026-11-13: ผู้ส่งที่ไม่อยู่ในรายชื่อ → เสนอชื่อจากช่อง Från เป็นลูกค้าใหม่, ชื่อเมืองไม่ใช้จับคู่, postnr จากช่องที่ถูกต้อง | V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
      วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
 
        【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
@@ -596,14 +596,16 @@ function findCustomers(text){
   C.forEach(function(c){var n=norm(c.name).split(' '),b=n.filter(function(w){return !STOP[w]})[0];if(b)brand[b]=1;
     uniq(n).forEach(function(w){df[w]=(df[w]||0)+1});
     norm(String(c.postnr||'').replace(/[\d\s-]+/,' ')).split(' ').forEach(function(w){if(w.length>=3)town[w]=1})});
-  function strong(w){return !OWN_TOK[w]&&(brand[w]||(df[w]<3&&!town[w]))}
+  function strong(w){return !OWN_TOK[w]&&!town[w]&&(brand[w]||df[w]<3)}   // V1.5: ortnamn räcker aldrig (Gislaved, Götene …)
   var res=[];
   C.forEach(function(c){
     if(OWN_NAME.test(norm(c.name).replace(/ /g,''))||OWN_NAME.test(c.name))return;
     var toks=norm(c.name).split(' ').filter(function(w){return w.length>=3&&!STOP[w]});
+    var own0=norm(c.name).split(' ').filter(function(w){return !STOP[w]})[0];
     var full=' '+norm(c.name)+' ',core=' '+norm(c.name).split(' ').filter(function(w){return !STOP[w]}).join(' ')+' ';
     function score(x){var h=toks.filter(function(w){return x.w[w]}),ph=x.t.indexOf(full)>=0||(core.length>4&&x.t.indexOf(core)>=0);
-      if(!ph&&!h.some(strong))return{sc:0,hit:0};
+      var b0=toks[0]===own0?own0:null;   // märkesordet = första ordet i kundnamnet
+      if(!ph&&!(b0&&x.w[b0]&&(!town[b0]||h.length>=2))&&h.filter(strong).length<2)return{sc:0,hit:0};   // V1.5: ett enstaka vanligt ord (t.ex. "mould") räcker inte
       var sc=(toks.length?h.length/toks.length:.5)+(ph?.5:0);return{sc:sc,hit:h.length||1}}
     var r;
     if(useSec){r=score(mine);if(!r.hit)return;if(r.sc>=score(oth).sc)r.sc+=.3}   // bara i fel ruta → inget förslag
@@ -613,10 +615,24 @@ function findCustomers(text){
   res.sort(function(a,b){return b.sc-a.sc||b.hit-a.hit||b.name.length-a.name.length});
   return res.filter(function(r){return r.sc>=.5}).slice(0,4);
 }
+/* V1.5: namnet i Från-/Till-rutan när det inte finns i kundlistan → förslag "ny kund" (fylls inte i automatiskt) */
+var OWN_ADDR=/forsheda|st[aå]lverktyg|\bfsv\b/i;
+function labelNames(text){
+  var P=labelParts(text),want=S.type==='out'?'to':'from';if(!P.found)return[];
+  return uniq(P[want].split(/\n/).map(function(l){return l.replace(/^[\s:;.,>*•|-]+|[\s:;.,|-]+$/g,'').replace(/\s+/g,' ')})
+    .filter(function(l){return l.length>=3&&l.length<=45&&(l.match(/[A-Za-zÅÄÖåäöÉéÜü]/g)||[]).length>=3&&!OWN_ADDR.test(l)
+      &&!/\b\d{3}\s?\d{2}\b|\d{4,}|@|www\.|\b(tel|phone|fax|att|attn|ref|kontakt|contact|box|vikt|weight|kolli|datum|date|sida|page)\b/i.test(l)
+      &&!/(gatan|v[aä]gen|gata|v[aä]g|street|road|str\.)(\s|$)/i.test(l)&&!/[A-Za-zÅÄÖåäö.]\s+\d{1,4}\s?[A-Za-z]?$/.test(l)&&(l.match(/\d/g)||[]).length<=2})).slice(0,2);
+}
+function labelPostnr(text){
+  var P=labelParts(text),want=S.type==='out'?'to':'from';
+  return findPostnr(P.found&&norm(P[want])?P[want]:text).filter(function(p){return !OWN_ADDR.test(p)});
+}
 /* Föreslå/fyll i kund. Har användaren själv skrivit/valt en kund skrivs den inte över. */
 function pickCust(){
   var a=S.ai;if(!a||a.text==null)return;
   var prev=a.autoCust;a.customers=findCustomers(a.text);
+  a.newNames=a.customers.length?[]:labelNames(a.text);a.postnr=labelPostnr(a.text);
   var cur=$('fCust').value;if(cur&&cur!==prev)return;
   var c=a.customers,top=c[0]&&(c.length===1||c[0].sc>c[1].sc)?c[0].name:'';
   $('fCust').value=top;a.autoCust=top;
@@ -724,8 +740,8 @@ function renderStatic(){
 }
 function renderAi(){
   var a=S.ai||{};
-  $('cCustAi').innerHTML=chipsHtml((a.customers||[]).map(function(c){return c.name}),'ai',$('fCust').value);
-  $('lblCustAi').classList.toggle('hide',!(a.customers||[]).length);
+  $('cCustAi').innerHTML=chipsHtml((a.customers||[]).map(function(c){return c.name}).concat((a.newNames||[]).map(function(n){return{v:n,l:n+' (ny kund)'}})),'ai',$('fCust').value);
+  $('lblCustAi').classList.toggle('hide',!(a.customers||[]).length&&!(a.newNames||[]).length);
   $('cInh').innerHTML=chipsHtml((a.projects||[]).map(function(p){return{v:p,l:'+ '+p}}),'ai');
   $('cFs').innerHTML=chipsHtml((a.waybills||[]).map(function(w){var f=fmtWaybill(w,$('fSped').value);return{v:f,l:f}}),'ai mono',$('fFs').value);
   $('cPost').innerHTML=chipsHtml(a.postnr||[],'ai',$('fPost').value);
@@ -771,7 +787,7 @@ async function analyse(file){
   S.ai.waybills=wb;S.ai.carriers=findCarriers('',wb);S.ai.zip=gs1Zip(codes);
   if(S.ai.carriers.length&&!$('fSped').value)$('fSped').value=S.ai.carriers[0];
   if(wb.length&&!$('fFs').value)$('fFs').value=fmtWaybill(wb[0],$('fSped').value);
-  anLine('bc',wb.length?'Streckkod: <b>'+esc(fmtWaybill(wb[0],$('fSped').value))+'</b>'+(S.ai.zip?' · mottagare postnr '+S.ai.zip.slice(0,3)+' '+S.ai.zip.slice(3):''):
+  anLine('bc',wb.length?'Streckkod: <b>'+esc(fmtWaybill(wb[0],$('fSped').value))+'</b>':
     codes.length?'Streckkod lästes men innehöll inget fraktsedelsnummer – ta en ny bild närmare':'Ingen streckkod hittades – håll mobilen rakt över etiketten');
   renderAi();
   anLine('ocr','Läser texten…',true);
@@ -783,7 +799,6 @@ async function analyse(file){
   a.text=text;pickCust();   // V1.4 【M07c】 namn i Från/Till, inte postnummer
   a.carriers=uniq(a.carriers.concat(findCarriers(text,wb)));
   a.projects=findProjects(text);
-  a.postnr=findPostnr(text);
   if(!a.waybills.length)a.waybills=findTextWaybills(text);
   if(!$('fSped').value&&a.carriers[0])$('fSped').value=a.carriers[0];
   if(!$('fFs').value&&a.waybills[0])$('fFs').value=fmtWaybill(a.waybills[0],$('fSped').value);
@@ -803,7 +818,7 @@ async function analyse(file){
       anLine('shp',(shp.sure?'':'⚠ ')+'UPS utrikes: sändningsnr <b>'+esc(shpF)+'</b> '+(used?'används som fraktsedelsnr':'hittades – tryck på knappen nedan för att använda det')+(shp.sure?'':' – kontrollera mot etiketten (SHP#)'));
     }else anLine('shp','⚠ UPS-sändningsnumret (SHP# '+esc(acct?acct.slice(0,2):SHP_PREFIX[0])+'…) kunde inte läsas säkert – fota etiketten rakt och skarpt igen, eller skriv in numret från etiketten');
   }
-  var found=[];if(a.customers.length)found.push('kund');if(a.carriers.length)found.push('speditör');if(a.projects.length)found.push('projektnr');
+  var found=[];if(a.customers.length)found.push('kund');else if((a.newNames||[]).length)found.push('ny kund (namn från '+(S.type==='out'?'Till':'Från')+'-rutan)');if(a.carriers.length)found.push('speditör');if(a.projects.length)found.push('projektnr');
   anLine('ocr',found.length?'Hittade: <b>'+found.join(', ')+'</b> – kontrollera nedan':'Ingen känd text hittades – fyll i nedan');
   renderAi();
 }
@@ -898,7 +913,7 @@ async function ping(){try{await Relay.poll(S.pair.topic+'-a',String(Math.floor(D
 
 /* การตั้งค่า */
 $('bSet').onclick=function(){
-  $('setInfo').innerHTML=S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad';
+  $('setInfo').innerHTML='<span style="opacity:.7">Sidversion V1.5 (2026-11-13)</span><br>'+(S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad');
   $('sheet').classList.add('on')};
 $('bSetClose').onclick=function(){$('sheet').classList.remove('on')};
 $('sheet').onclick=function(e){if(e.target===$('sheet'))$('sheet').classList.remove('on')};
