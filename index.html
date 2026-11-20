@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <!-- ══════════════════════════════════════════════════════════
-     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.5 2026-11-13: ผู้ส่งที่ไม่อยู่ในรายชื่อ → เสนอชื่อจากช่อง Från เป็นลูกค้าใหม่, ชื่อเมืองไม่ใช้จับคู่, postnr จากช่องที่ถูกต้อง | V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.6 2026-11-20: รูปที่ถ่ายตะแคง → OCR หมุนรูปเองแล้วเลือกแบบที่อ่านได้ดีที่สุด (ocr()) + ชื่อลูกค้า 2 คำติดกันที่มีแค่ลูกค้าเดียว (findCustomers) | V1.5 2026-11-13: ผู้ส่งที่ไม่อยู่ในรายชื่อ → เสนอชื่อจากช่อง Från เป็นลูกค้าใหม่, ชื่อเมืองไม่ใช้จับคู่, postnr จากช่องที่ถูกต้อง | V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
      วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
 
        【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
@@ -512,13 +512,33 @@ function gs1Zip(codes){
   for(var i=0;i<codes.length;i++){var m=String(codes[i]).replace(/^\][A-Za-z]\d/,'').match(/^\(?421\)?752(\d{5})/);if(m)return m[1]}
   return'';
 }
-async function ocr(img,onProg){
+async function ocr(img,onProg,onRot){
   await loadScript(TESS_URL);
   if(!S.ocrWorker)S.ocrWorker=Tesseract.createWorker(['swe','eng'],1,{logger:function(m){if(m.status==='recognizing text'&&onProg)onProg(m.progress)}});
   var w=await S.ocrWorker;
-  var cv=toCanvas(img,2000),r=await w.recognize(cv);
-  S.lastOcr={canvas:cv,img:img,data:(r&&r.data)||{}};
-  return (r&&r.data&&r.data.text)||'';
+  var cv=toCanvas(img,2000),r=await w.recognize(cv),d=(r&&r.data)||{};
+  var best={cv:cv,d:d,s:ocrScore(d),deg:0};
+  /* V1.6: ถ่ายรูปตะแคง (ตัวหนังสือแนวตั้ง) → OCR อ่านไม่ออก (บาร์โค้ดยังอ่านได้) → ลองหมุน 90° / 270° / 180°
+     แล้วใช้แบบที่ได้คำที่อ่านชัดมากที่สุด */
+  if(best.s<12){
+    var degs=[90,270,180];
+    for(var i=0;i<degs.length;i++){
+      onRot&&onRot(degs[i]);
+      var c2=rotCanvas2(img,degs[i],2000),r2=await w.recognize(c2),d2=(r2&&r2.data)||{},s2=ocrScore(d2);
+      if(s2>best.s)best={cv:c2,d:d2,s:s2,deg:degs[i]};
+      if(best.deg&&best.s>=20)break;
+    }
+  }
+  S.lastOcr={canvas:best.cv,img:best.deg?rotCanvas2(img,best.deg,4032):img,data:best.d,deg:best.deg};
+  return best.d.text||'';
+}
+/* จำนวนคำที่อ่านได้ชัด (ความมั่นใจ ≥ 60 และมีตัวอักษรอย่างน้อย 3 ตัว) – ใช้เลือกทิศของรูป */
+function ocrScore(d){var n=0;ocrWords(d||{}).forEach(function(x){var t=String(x.text||'');if((x.confidence||0)>=60&&(t.match(/[A-Za-zÅÄÖåäöÉé]/g)||[]).length>=3)n++});return n}
+/* หมุนรูปตามเข็มนาฬิกา deg = 90/180/270 (ย่อให้ด้านยาวไม่เกิน max) */
+function rotCanvas2(img,deg,max){
+  var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
+  var q=deg%180!==0,c=document.createElement('canvas');c.width=q?h:w;c.height=q?w:h;var x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(deg*Math.PI/180);x.drawImage(img,-w/2,-h/2,w,h);return c;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -597,6 +617,10 @@ function findCustomers(text){
     uniq(n).forEach(function(w){df[w]=(df[w]||0)+1});
     norm(String(c.postnr||'').replace(/[\d\s-]+/,' ')).split(' ').forEach(function(w){if(w.length>=3)town[w]=1})});
   function strong(w){return !OWN_TOK[w]&&!town[w]&&(brand[w]||df[w]<3)}   // V1.5: ortnamn räcker aldrig (Gislaved, Götene …)
+  /* V1.6: två ord i följd ur ett kundnamn (t.ex. "Plast Vansbro") som bara finns i ETT kundnamn räcker,
+     även om första ordet ("Liljas") lästes fel */
+  var pairCnt={};C.forEach(function(c){var t=norm(c.name).split(' ').filter(function(w){return !STOP[w]});
+    uniq(t.slice(1).map(function(w,i){return t[i]+' '+w})).forEach(function(k){pairCnt[k]=(pairCnt[k]||0)+1})});
   var res=[];
   C.forEach(function(c){
     if(OWN_NAME.test(norm(c.name).replace(/ /g,''))||OWN_NAME.test(c.name))return;
@@ -605,7 +629,8 @@ function findCustomers(text){
     var full=' '+norm(c.name)+' ',core=' '+norm(c.name).split(' ').filter(function(w){return !STOP[w]}).join(' ')+' ';
     function score(x){var h=toks.filter(function(w){return x.w[w]}),ph=x.t.indexOf(full)>=0||(core.length>4&&x.t.indexOf(core)>=0);
       var b0=toks[0]===own0?own0:null;   // märkesordet = första ordet i kundnamnet
-      if(!ph&&!(b0&&x.w[b0]&&(!town[b0]||h.length>=2))&&h.filter(strong).length<2)return{sc:0,hit:0};   // V1.5: ett enstaka vanligt ord (t.ex. "mould") räcker inte
+      var ct=norm(c.name).split(' ').filter(function(w){return !STOP[w]}),up=ct.slice(1).some(function(w,i){var k=ct[i]+' '+w;return pairCnt[k]===1&&k.length>=10&&ct[i].length>=3&&w.length>=3&&x.t.indexOf(' '+k+' ')>=0});
+      if(!ph&&!up&&!(b0&&x.w[b0]&&(!town[b0]||h.length>=2))&&h.filter(strong).length<2)return{sc:0,hit:0};   // V1.5: ett enstaka vanligt ord (t.ex. "mould") räcker inte
       var sc=(toks.length?h.length/toks.length:.5)+(ph?.5:0);return{sc:sc,hit:h.length||1}}
     var r;
     if(useSec){r=score(mine);if(!r.hit)return;if(r.sc>=score(oth).sc)r.sc+=.3}   // bara i fel ruta → inget förslag
@@ -792,7 +817,8 @@ async function analyse(file){
   renderAi();
   anLine('ocr','Läser texten…',true);
   var text='';
-  try{text=await ocr(img,function(p){if(my===S.shotId)anLine('ocr','Läser texten… '+Math.round(p*100)+' %',true)})}
+  try{text=await ocr(img,function(p){if(my===S.shotId)anLine('ocr','Läser texten… '+Math.round(p*100)+' %',true)},
+    function(deg){if(my===S.shotId)anLine('ocr','Bilden verkar ligga på sidan – läser texten vriden '+deg+'°…',true)})}
   catch(e){if(my===S.shotId)anLine('ocr','Textläsning ej tillgänglig ('+esc(e.message)+')');return}
   if(my!==S.shotId)return;
   var a=S.ai;
@@ -819,7 +845,8 @@ async function analyse(file){
     }else anLine('shp','⚠ UPS-sändningsnumret (SHP# '+esc(acct?acct.slice(0,2):SHP_PREFIX[0])+'…) kunde inte läsas säkert – fota etiketten rakt och skarpt igen, eller skriv in numret från etiketten');
   }
   var found=[];if(a.customers.length)found.push('kund');else if((a.newNames||[]).length)found.push('ny kund (namn från '+(S.type==='out'?'Till':'Från')+'-rutan)');if(a.carriers.length)found.push('speditör');if(a.projects.length)found.push('projektnr');
-  anLine('ocr',found.length?'Hittade: <b>'+found.join(', ')+'</b> – kontrollera nedan':'Ingen känd text hittades – fyll i nedan');
+  var vr=S.lastOcr&&S.lastOcr.deg?' (bilden vreds '+S.lastOcr.deg+'°)':'';
+  anLine('ocr',found.length?'Hittade: <b>'+found.join(', ')+'</b>'+vr+' – kontrollera nedan':'Ingen känd text hittades'+vr+' – fyll i nedan');
   renderAi();
 }
 
@@ -913,7 +940,7 @@ async function ping(){try{await Relay.poll(S.pair.topic+'-a',String(Math.floor(D
 
 /* การตั้งค่า */
 $('bSet').onclick=function(){
-  $('setInfo').innerHTML='<span style="opacity:.7">Sidversion V1.5 (2026-11-13)</span><br>'+(S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad');
+  $('setInfo').innerHTML='<span style="opacity:.7">Sidversion V1.6 (2026-11-20)</span><br>'+(S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad');
   $('sheet').classList.add('on')};
 $('bSetClose').onclick=function(){$('sheet').classList.remove('on')};
 $('sheet').onclick=function(e){if(e.target===$('sheet'))$('sheet').classList.remove('on')};
