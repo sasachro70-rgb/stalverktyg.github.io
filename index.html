@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <!-- ══════════════════════════════════════════════════════════
-     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.6 2026-11-20: รูปที่ถ่ายตะแคง → OCR หมุนรูปเองแล้วเลือกแบบที่อ่านได้ดีที่สุด (ocr()) + ชื่อลูกค้า 2 คำติดกันที่มีแค่ลูกค้าเดียว (findCustomers) | V1.5 2026-11-13: ผู้ส่งที่ไม่อยู่ในรายชื่อ → เสนอชื่อจากช่อง Från เป็นลูกค้าใหม่, ชื่อเมืองไม่ใช้จับคู่, postnr จากช่องที่ถูกต้อง | V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
+     สารบัญไฟล์: Frakter Mobil (ถ่ายรูปกล่องพัสดุ → ส่งเข้า Excel) – V1.7 2026-11-23: แก้ชื่อประเทศที่ OCR อ่านผิด (Klna → Kina) ในชื่อลูกค้าใหม่ + ไม่เสนอบรรทัดที่เป็นแค่ชื่อประเทศ (fixCountry) | V1.6 2026-11-20: รูปที่ถ่ายตะแคง → OCR หมุนรูปเองแล้วเลือกแบบที่อ่านได้ดีที่สุด (ocr()) + ชื่อลูกค้า 2 คำติดกันที่มีแค่ลูกค้าเดียว (findCustomers) | V1.5 2026-11-13: ผู้ส่งที่ไม่อยู่ในรายชื่อ → เสนอชื่อจากช่อง Från เป็นลูกค้าใหม่, ชื่อเมืองไม่ใช้จับคู่, postnr จากช่องที่ถูกต้อง | V1.4 2026-11-10: เสนอชื่อลูกค้าจากชื่อในช่อง Från/Till ตามประเภท Ankomst/Avgång ไม่ใช้รหัสไปรษณีย์ (【M07c】) | V1.3 2026-10-29: UPS ต่างประเทศ ใช้เลข SHP# (GF…) แทนเลข 1Z (【M07b】) | V1.2: ดีไซน์ใหม่ + ปุ่ม Hjälp (【M11】)
      วิธีใช้: กด Ctrl+F แล้วพิมพ์ 【M07】 เพื่อกระโดดไปยังส่วนนั้น
 
        【M01】 CSS: ดีไซน์หน้ามือถือ (สี ปุ่ม โหมดมืด)
@@ -642,10 +642,29 @@ function findCustomers(text){
 }
 /* V1.5: namnet i Från-/Till-rutan när det inte finns i kundlistan → förslag "ny kund" (fylls inte i automatiskt) */
 var OWN_ADDR=/forsheda|st[aå]lverktyg|\bfsv\b/i;
+/* V1.7: OCR สับสน i ↔ l/1/| (เช่น "Kina" อ่านเป็น "Klna") → แก้เฉพาะคำที่ตรงกับชื่อประเทศ คงตัวพิมพ์ใหญ่/เล็กเดิม */
+var COUNTRY=('kina china sverige sweden norge norway danmark denmark finland tyskland germany deutschland polen poland '+
+  'italien italy frankrike france spanien spain holland nederlanderna netherlands belgien belgium osterrike austria schweiz switzerland '+
+  'england storbritannien japan korea taiwan indien india turkiet turkey estland lettland litauen tjeckien ungern portugal mainland').split(' ');
+function fixCountry(l){
+  return String(l).replace(/[A-Za-zÅÄÖåäö1|!]+/g,function(w){
+    if(w.length<4||/^[0-9|!]+$/.test(w))return w;
+    if(COUNTRY.indexOf(norm(w))>=0)return w;
+    var pos=[];for(var i=0;i<w.length;i++)if(/[l1|!]/i.test(w[i]))pos.push(i);
+    if(!pos.length||pos.length>4)return w;
+    var rest=w.replace(/[l1|!]/gi,''),I=rest===rest.toUpperCase()?'I':'i',L=I==='I'?'L':'l';   // ตัวอื่นเป็นตัวใหญ่หมด → 'I'
+    for(var m=1;m<(1<<pos.length);m++){       // ลองทุกแบบ: ตัวที่สงสัยเป็น i หรือ l
+      var a=w.split('');pos.forEach(function(p,k){a[p]=(m>>k)&1?I:(/[1|!]/.test(w[p])?L:w[p])});
+      var c=a.join('');if(COUNTRY.indexOf(norm(c))>=0)return c;
+    }
+    return w;
+  });
+}
+function onlyCountry(l){var t=norm(l).split(' ').filter(Boolean);return t.length>0&&t.every(function(x){return COUNTRY.indexOf(x)>=0})}
 function labelNames(text){
   var P=labelParts(text),want=S.type==='out'?'to':'from';if(!P.found)return[];
-  return uniq(P[want].split(/\n/).map(function(l){return l.replace(/^[\s:;.,>*•|-]+|[\s:;.,|-]+$/g,'').replace(/\s+/g,' ')})
-    .filter(function(l){return l.length>=3&&l.length<=45&&(l.match(/[A-Za-zÅÄÖåäöÉéÜü]/g)||[]).length>=3&&!OWN_ADDR.test(l)
+  return uniq(P[want].split(/\n/).map(function(l){return fixCountry(l.replace(/^[\s:;.,>*•|-]+|[\s:;.,|-]+$/g,'').replace(/\s+/g,' '))})
+    .filter(function(l){return l.length>=3&&!onlyCountry(l)&&l.length<=45&&(l.match(/[A-Za-zÅÄÖåäöÉéÜü]/g)||[]).length>=3&&!OWN_ADDR.test(l)
       &&!/\b\d{3}\s?\d{2}\b|\d{4,}|@|www\.|\b(tel|phone|fax|att|attn|ref|kontakt|contact|box|vikt|weight|kolli|datum|date|sida|page)\b/i.test(l)
       &&!/(gatan|v[aä]gen|gata|v[aä]g|street|road|str\.)(\s|$)/i.test(l)&&!/[A-Za-zÅÄÖåäö.]\s+\d{1,4}\s?[A-Za-z]?$/.test(l)&&(l.match(/\d/g)||[]).length<=2})).slice(0,2);
 }
@@ -940,7 +959,7 @@ async function ping(){try{await Relay.poll(S.pair.topic+'-a',String(Math.floor(D
 
 /* การตั้งค่า */
 $('bSet').onclick=function(){
-  $('setInfo').innerHTML='<span style="opacity:.7">Sidversion V1.6 (2026-11-20)</span><br>'+(S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad');
+  $('setInfo').innerHTML='<span style="opacity:.7">Sidversion V1.7 (2026-11-23)</span><br>'+(S.key?('Kopplad · kanal <b>…'+esc(S.pair.topic.slice(-6))+'</b><br>Kundlista: '+(S.lists?S.lists.customers.length+' kunder, uppdaterad '+esc(new Date(S.lists.at).toLocaleString('sv-SE')):'saknas')):'Inte kopplad');
   $('sheet').classList.add('on')};
 $('bSetClose').onclick=function(){$('sheet').classList.remove('on')};
 $('sheet').onclick=function(e){if(e.target===$('sheet'))$('sheet').classList.remove('on')};
